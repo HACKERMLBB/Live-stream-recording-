@@ -11,9 +11,12 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # ================= CONFIG =================
-TOKEN = os.getenv("8950257598:AAFxktO9gEKXQwRpyy8xkPnPZTXqgSx-d48")
-MIXDROP_KEY = os.getenv("Ds52juatWdfj41timTz")
-CHANNEL_ID = os.getenv("-1004290757242")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+MIXDROP_KEY = os.getenv("MIXDROP_KEY")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
+
+if not BOT_TOKEN:
+    print("ERROR: BOT_TOKEN is missing in Railway Variables!")
 # ==========================================
 
 USERNAMES_FILE = "usernames.json"
@@ -206,29 +209,6 @@ def is_live(entry):
     )
     return result2.returncode == 0
 
-# ================= STREAMCAP =================
-
-def is_streamcap_available():
-    return shutil.which("streamcap") is not None or shutil.which("StreamCap") is not None
-
-def record_via_streamcap(entry, output_path):
-    url = get_url(entry)
-    print(f"Trying StreamCap for {entry}...")
-    cmd = shutil.which("streamcap") or shutil.which("StreamCap")
-    if not cmd:
-        print("StreamCap CLI not found - skipping")
-        return False
-    try:
-        subprocess.run([cmd, "record", url, "-o", output_path], timeout=36000)
-    except Exception as e:
-        print(f"StreamCap failed: {e}")
-        return False
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-        return True
-    return False
-
-# ================= RECORD - 3 ENGINES =================
-
 def record_stream(entry, output_path):
     url = get_url(entry)
     print(f"[1/3] Trying Streamlink 360p for {entry}...")
@@ -243,24 +223,13 @@ def record_stream(entry, output_path):
         return True
     if os.path.exists(output_path):
         os.remove(output_path)
-    print(f"[1/3] Trying Streamlink 360p30,360p for {entry}...")
-    subprocess.run(["streamlink", url, "360p30,360p", "-o", output_path])
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-        return True
-    if os.path.exists(output_path):
-        os.remove(output_path)
     print(f"[2/3] Trying yt-dlp for {entry}...")
     subprocess.run(["yt-dlp", url, "-f", "best[height<=360]", "-o", output_path, "--no-part"])
     if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
         return True
     if os.path.exists(output_path):
         os.remove(output_path)
-    print(f"[3/3] Trying StreamCap for {entry}...")
-    if record_via_streamcap(entry, output_path):
-        return True
     return False
-
-# ================= UPLOAD - RUNS IN BACKGROUND =================
 
 async def upload_and_send(entry, base_name, full_path, app):
     file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
@@ -317,8 +286,6 @@ async def upload_and_send(entry, base_name, full_path, app):
         f"✅ Enjoy!"
     )
 
-# ================= MAIN PROCESS =================
-
 async def process_stream(entry, app):
     platform, uid = parse_entry(entry)
     base_name = f"{platform}_{uid}_{int(time.time())}"
@@ -344,6 +311,9 @@ def check_loop(app):
         time.sleep(60)
 
 def main():
+    if not BOT_TOKEN:
+        print("BOT_TOKEN missing! Check Railway Variables")
+        return
     from telegram.request import HTTPXRequest
     request = HTTPXRequest(read_timeout=600, write_timeout=600, connect_timeout=60, pool_timeout=600)
     app = Application.builder().token(BOT_TOKEN).request(request).build()
@@ -353,7 +323,7 @@ def main():
     app.add_handler(CommandHandler("list", list_command))
     app.add_handler(CommandHandler("status", status_command))
     threading.Thread(target=check_loop, args=(app,), daemon=True).start()
-    print("Bot Running - 360p Mode... [Streamlink + yt-dlp + StreamCap]")
+    print("Bot Running - 360p Mode... [Streamlink + yt-dlp]")
     app.run_polling()
 
 if __name__ == "__main__":
