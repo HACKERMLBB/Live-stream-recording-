@@ -11,7 +11,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # ================= CONFIG =================
-BOT_TOKEN = os.getenv("8950257598:AAGBdrYTPe76esI6iBRV0uCgvmeMYr7Z6e8")
+BOT_TOKEN = os.getenv("")
 MIXDROP_KEY = os.getenv("Ds52juatWdfj41timTz")
 CHANNEL_ID = os.getenv("-1004290757242")
 # ==========================================
