@@ -22,29 +22,11 @@ if not BOT_TOKEN:
 USERNAMES_FILE = "usernames.json"
 MAX_TELEGRAM_SIZE = 50 * 1024 * 1024
 
-# ================= PLATFORMS =================
+# ================= PLATFORMS - ONLY 3 =================
 PLATFORMS = {
     "twitch": "https://twitch.tv/{id}",
-    "flextv": "https://www.flextv.co.kr/channels/{id}",
-    "tting": "https://www.flextv.co.kr/channels/{id}",
-    "youtube": "https://www.youtube.com/@{id}/live",
-    "yt": "https://www.youtube.com/@{id}/live",
     "kick": "https://kick.com/{id}",
-    "tiktok": "https://www.tiktok.com/@{id}/live",
-    "bilibili": "https://live.bilibili.com/{id}",
-    "douyu": "https://www.douyu.com/{id}",
-    "huya": "https://www.huya.com/{id}",
-    "douyin": "https://live.douyin.com/{id}",
-    "chzzk": "https://chzzk.naver.com/live/{id}",
-    "afreeca": "https://play.afreecatv.com/{id}",
-    "soop": "https://play.afreecatv.com/{id}",
-    "pandalive": "https://www.pandalive.co.kr/channel/{id}",
-    "twitcasting": "https://twitcasting.tv/{id}",
-    "nimo": "https://www.nimo.tv/{id}",
-    "bigo": "https://www.bigo.tv/{id}",
-    "bigolive": "https://www.bigo.tv/{id}",
-    "stripchat": "https://stripchat.com/{id}",
-    "chaturbate": "https://chaturbate.com/{id}"
+    "nimo": "https://m.nimo.tv/live/{id}",
 }
 
 def parse_entry(entry):
@@ -98,32 +80,27 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         "🎬 Welcome to Yoon Auto Recorder 🎬\n\n"
         "📌 Commands:\n"
-        "/add username - ➕ Add an account\n"
-        "/add platform:id - ➕ Add any platform\n"
+        "/add username - ➕ Add Twitch account\n"
+        "/add kick:username - ➕ Add Kick\n"
+        "/add nimo:RoomID - ➕ Add Nimo (Room ID only!)\n"
         "/remove username - ➖ Remove an account\n"
-        "/remove platform:id - ➖ Remove any platform\n"
         "/list - 📋 Show all accounts\n"
         "/status - 🔴 Check recording status\n\n"
         "🎞️ Quality: 360p\n"
         "✂️ Split: 50MB Parts\n"
         "☁️ Upload: Mixdrop + Telegram\n\n"
-        "🌐 Platforms:\n"
-        "twitch, flextv, youtube, kick, tiktok,\n"
-        "bilibili, douyu, huya, douyin, chzzk,\n"
-        "afreeca, soop, pandalive, twitcasting,\n"
-        "nimo, bigo, bigolive, stripchat, chaturbate\n\n"
+        "🌐 Platforms: ONLY 3\n"
+        "twitch, kick, nimo\n\n"
         "💡 Examples:\n"
         "/add yoon_gaming1\n"
-        "/add flextv:390971\n"
-        "/add bigo:12345678\n"
         "/add kick:yoon_live\n"
-        "/add youtube:yoonlive"
+        "/add nimo:818540864"
     )
     await update.message.reply_text(message)
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("⚠️ Usage: /add username OR /add platform:id\n💡 Example: /add flextv:390971")
+        await update.message.reply_text("⚠️ Usage: /add username OR /add kick:username OR /add nimo:RoomID\n💡 Example: /add nimo:818540864")
         return
     raw = " ".join(context.args).lower().strip()
     platform, uid = parse_entry(raw)
@@ -141,7 +118,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("⚠️ Usage: /remove username OR /remove platform:id\n💡 Example: /remove flextv:390971")
+        await update.message.reply_text("⚠️ Usage: /remove username OR /remove kick:username OR /remove nimo:RoomID\n💡 Example: /remove nimo:818540864")
         return
     raw = " ".join(context.args).lower().strip()
     platform, uid = parse_entry(raw)
