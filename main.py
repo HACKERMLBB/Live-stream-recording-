@@ -314,15 +314,14 @@ async def process_stream(entry, app):
         f"✅ Enjoy!"
     )
 
-def check_loop(app):
+def check_loop(app, loop):
     while True:
         for username in list(USERNAMES):
             if username not in RECORDING and is_live(username):
                 RECORDING.add(username)
-                def run_task(user=username):
-                    asyncio.run(process_stream(user, app))
-                    RECORDING.discard(user)
-                threading.Thread(target=run_task, daemon=True).start()
+                # FIX: Use bot main loop, do not create new loop with asyncio.run()
+                # This fixes "Event loop is closed" error
+                asyncio.run_coroutine_threadsafe(process_stream(username, app), loop)
         time.sleep(60)
 
 def main():
@@ -337,7 +336,11 @@ def main():
     app.add_handler(CommandHandler("remove", remove_command))
     app.add_handler(CommandHandler("list", list_command))
     app.add_handler(CommandHandler("status", status_command))
-    threading.Thread(target=check_loop, args=(app,), daemon=True).start()
+
+    # FIX: Get main loop and pass it to check_loop
+    loop = asyncio.get_event_loop()
+    threading.Thread(target=check_loop, args=(app, loop), daemon=True).start()
+
     print("Bot Running - 360p Live Upload Mode... [Streamlink + ffmpeg segment]")
     app.run_polling()
 
