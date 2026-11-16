@@ -125,7 +125,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Heyy Welcome Baby 😍🔥\n"
         "\n"
         "🔴🎥 Auto Record Lives\n"
-        "🎞️ 480p30 Clear Quality\n"
+        "🎞️ 360p Clear Quality\n"
         "✂️ 10 Min Parts\n"
         "☁️ Mixdrop Backup\n"
         "\n"
@@ -158,7 +158,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎬 {display_name(entry)}\n"
             f"🔗 Link : {get_url(entry)}\n"
             f"🔴 Auto Record : ON\n"
-            f"🎞️ Quality : 480p30"
+            f"🎞️ Quality : 360p"
         )
     else:
         await update.message.reply_text(f"ℹ️ Already Added : {display_name(entry)}")
@@ -176,7 +176,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status = "🔴 REC" if user in RECORDING else "⏳ Waiting"
         text += f"• {display_name(user)} — {status}\n"
 
-    text += "\n🎞️ Quality : 480p30\n✂️ Parts : 10 Min Each"
+    text += "\n🎞️ Quality : 360p\n✂️ Parts : 10 Min Each"
     await update.message.reply_text(text)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -186,7 +186,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "🔴 ─── Currently Recording ─── 🔴\n\n"
     for user in RECORDING:
-        text += f"🎥 {display_name(user)} — 480p30\n"
+        text += f"🎥 {display_name(user)} — 360p\n"
 
     await update.message.reply_text(text)
 
@@ -299,7 +299,7 @@ def is_live(entry):
 
     for url in get_all_urls(entry):
         result = subprocess.run(
-            ["streamlink", url, "480p30,480p,best", "--stream-url"],
+            ["streamlink", url, "360p,best", "--stream-url"],
             capture_output=True, text=True, timeout=30
         )
         if result.stdout.strip().startswith("http"):
@@ -321,7 +321,7 @@ def get_stream_url(entry):
             return urls[0]
         for url in get_all_urls(entry):
             result = subprocess.run(
-                ["streamlink", url, "480p30,480p,best", "--stream-url"],
+                ["streamlink", url, "360p,best", "--stream-url"],
                 capture_output=True, text=True, timeout=30
             )
             if result.stdout.strip().startswith("http"):
@@ -329,7 +329,7 @@ def get_stream_url(entry):
         return None
 
     for url in get_all_urls(entry):
-        for quality in ["480p30", "480p", "best"]:
+        for quality in ["360p", "360p30", "best"]:
             result = subprocess.run(
                 ["streamlink", url, quality, "--stream-url"],
                 capture_output=True, text=True, timeout=30
@@ -337,7 +337,7 @@ def get_stream_url(entry):
             if result.stdout.strip().startswith("http"):
                 return result.stdout.strip()
         result = subprocess.run(
-            ["yt-dlp", url, "-f", "best[height<=480][fps<=30]", "-g"],
+            ["yt-dlp", url, "-f", "best[height<=360]", "-g"],
             capture_output=True, text=True, timeout=30
         )
         stream_url = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
@@ -357,7 +357,7 @@ async def upload_one_part(entry, part_path, index, app):
             f"🎬 {display_name(entry)}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📂 Part : {index}\n"
-            f"🎞️ Quality : 480p30\n"
+            f"🎞️ Quality : 360p\n"
             f"🔗 Mixdrop Part {index} :\n{mixdrop_link}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"▶️ Part {index} — Watch Here ✨"
@@ -367,7 +367,7 @@ async def upload_one_part(entry, part_path, index, app):
             f"🎬 {display_name(entry)}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📂 Part : {index}\n"
-            f"🎞️ Quality : 480p30\n"
+            f"🎞️ Quality : 360p\n"
             f"❌ Mixdrop Part {index} : Upload Failed\n"
             f"━━━━━━━━━━━━━━━\n"
             f"▶️ Part {index} — Watch Here ✨"
