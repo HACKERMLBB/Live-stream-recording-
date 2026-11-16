@@ -14,6 +14,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 # ==================================================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MIXDROP_KEY = os.getenv("MIXDROP_KEY")
+MIXDROP_EMAIL = os.getenv("MIXDROP_EMAIL")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 USERNAMES_FILE = "usernames.json"
@@ -88,21 +89,48 @@ def save_usernames():
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
-        "🎬✨ Welcome to Yoon Auto Recorder ✨🎬\n\n"
-        "📌 ─── Commands ─── 📌\n"
-        "➕ /add username\n"
-        "➕ /add kick:username\n"
-        "➕ /add nimo:RoomID\n"
-        "📋 /list - Show All Accounts\n"
-        "🔴 /status - Recording Status\n\n"
-        "🎞️ Quality : 360p\n"
-        "📹 Mode : Video + Caption Only\n"
-        "☁️ Backup : Mixdrop\n\n"
-        "🌐 Platforms : Twitch | Kick | Nimo\n\n"
-        "💡 ─── Examples ─── 💡\n"
-        "👉 /add yoon_gaming1\n"
-        "👉 /add kick:yoon_live\n"
-        "👉 /add nimo:818540864"
+        "╔══════════════════════╗\n"
+        "   🎬✨ YOON ✨🎬\n"
+        "   AUTO RECORDER 🤖💜\n"
+        "╚══════════════════════╝\n"
+        "\n"
+        "👋 Heyy Welcome Baby 😍🔥\n"
+        "✨ You Are In The Right Place ✨\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🌟 ─── WHAT I DO ─── 🌟\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "🔴🎥 Auto Record Live Streams\n"
+        "🎞️✨ Super Clear 360p Quality\n"
+        "✂️📂 Auto Split 10 Min Parts\n"
+        "☁️🔗 Auto Upload To Mixdrop\n"
+        "📹💜 Auto Send To Channel\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🌐 ─── PLATFORMS ─── 🌐\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "💜 Twitch\n"
+        "💚 Kick\n"
+        "💛 Nimo TV\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💎 ─── WHY YOON? ─── 💎\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "⚡ Lightning Fast ⚡\n"
+        "🤖 24/7 Auto Working 🤖\n"
+        "🎯 No Missed Lives 🎯\n"
+        "🔥 Best Quality Ever 🔥\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "💖 Sit Back & Enjoy 💖\n"
+        "🍿 Your Lives Are Safe Here 🍿\n"
+        "🚀 Yoon Got You Covered 🚀\n"
+        "\n"
+        "✨💜 Made With Love - YOON 💜✨"
     )
     await update.message.reply_text(message)
 
@@ -160,23 +188,32 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 # ==================================================
-# ☁️ HELPERS
+# ☁️ HELPERS - MIXDROP WITH EMAIL
 # ==================================================
 
 def upload_to_mixdrop(file_path):
     try:
+        print(f"Mixdrop Upload Start : {file_path}")
+        print(f"Email Set : {bool(MIXDROP_EMAIL)} | Key Set : {bool(MIXDROP_KEY)}")
+
         with open(file_path, "rb") as f:
             response = requests.post(
                 "https://ul.mixdrop.ag/api",
-                data={"key": MIXDROP_KEY},
+                data={
+                    "email": MIXDROP_EMAIL,
+                    "key": MIXDROP_KEY,
+                },
                 files={"file": f},
                 timeout=3600
             ).json()
-        print(f"Mixdrop Response: {response}")
+
+        print(f"Mixdrop Response : {response}")
         if response.get("success"):
             return response["result"]["url"]
+        else:
+            print(f"Mixdrop Failed : {response.get('error', 'Unknown Error')}")
     except Exception as e:
-        print(f"Mixdrop Error: {e}")
+        print(f"Mixdrop Error : {e}")
     return None
 
 def is_live(entry):
