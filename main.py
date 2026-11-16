@@ -114,7 +114,7 @@ def parse_entry(entry):
         if m:
             return "tiktok", "@" + m.group(1)
 
-    if "bigo.tv" in low or "bigo" in low and "bigo:" in low:
+    if "bigo.tv" in low:
         m = re.search(r"bigo\.tv/([a-z0-9_\-]+)", low)
         if m:
             return "bigo", m.group(1)
@@ -129,7 +129,7 @@ def parse_entry(entry):
         if m:
             return "twitcasting", m.group(1)
 
-    if "nicovideo.jp" in low or "nicolive" in low:
+    if "nicovideo.jp" in low:
         m = re.search(r"nicovideo\.jp/watch/([a-z0-9_\-]+)", low)
         if m:
             return "nicolive", m.group(1)
@@ -170,9 +170,6 @@ def parse_entry(entry):
         if platform in ["youtube", "tiktok"] and not uid.startswith("@"):
             uid = "@" + uid
         return platform, uid
-
-    if entry_clean.startswith("youtube:") or entry_clean.startswith("tiktok:"):
-        return entry_clean.split(":", 1)[0], "@" + entry_clean.split(":", 1)[1].lstrip("@")
 
     if re.match(r"^[a-z0-9_\-]+$", entry_clean) and "." not in entry_clean and "/" not in entry_clean:
         return "soop", entry_clean
@@ -238,13 +235,14 @@ else:
     USERNAMES = []
 
 RECORDING = set()
+
 def save_usernames():
     with open(USERNAMES_FILE, "w") as f:
         json.dump(USERNAMES, f)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "✨🎬 𝗬𝗢𝗢𝗡 🎬✨\n"
+        "✨🎬 YOON 🎬✨\n"
         "💜 Auto Recorder Bot\n\n"
         "🔴 Auto Record\n"
         "🎞️ 360p30\n"
@@ -260,7 +258,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
-            "⚠️ 𝗨𝘀𝗮𝗴𝗲\n\n"
+            "⚠️ Usage\n\n"
             "👑 SOOP:\n"
             "/add seoeun3104\n\n"
             "❤️ YouTube:\n"
@@ -283,7 +281,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         USERNAMES.append(entry)
         save_usernames()
         await update.message.reply_text(
-            f"✅ 𝗔𝗱𝗱𝗲𝗱!\n\n"
+            f"✅ Added!\n\n"
             f"🎬 {display_name(entry)}\n"
             f"🔗 {get_url(entry)}\n"
             f"🔴 Recording: ON\n"
@@ -310,7 +308,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not USERNAMES:
         await update.message.reply_text("📭 Empty\n👉 /add seoeun3104")
         return
-    text = "👀 𝗪𝗮𝘁𝗰𝗵𝗶𝗻𝗴\n\n"
+    text = "👀 Watching\n\n"
     for user in USERNAMES:
         status = "🔴 REC" if user in RECORDING else "⏳ Waiting"
         text += f"🎬 {display_name(user)}  {status}\n"
@@ -321,22 +319,21 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not RECORDING:
         await update.message.reply_text("😴 No Live Now")
         return
-    text = "🔴 𝗥𝗲𝗰𝗼𝗿𝗱𝗶𝗻𝗴\n\n"
+    text = "🔴 Recording\n\n"
     for user in RECORDING:
         text += f"🎥 {display_name(user)}\n"
     await update.message.reply_text(text)
 
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🧪 Testing...")
-    try:
-        await context.bot.send_message(CHANNEL_ID, "🧪 Test OK ✅")
-        await update.message.reply_text("✅ Channel OK")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Channel Failed\n{e}")
     if not MIXDROP_EMAIL or not MIXDROP_KEY:
         await update.message.reply_text("❌ Mixdrop Missing")
     else:
         await update.message.reply_text("✅ Mixdrop OK")
+    if not CHANNEL_ID:
+        await update.message.reply_text("❌ Channel Missing")
+    else:
+        await update.message.reply_text("✅ Channel OK")
 
 def get_nimo_info(room_id):
     urls = [f"https://m.nimo.tv/api/v1/live/room?roomId={room_id}"]
@@ -527,11 +524,6 @@ async def upload_one_part(entry, part_path, index, app):
         except Exception as e:
             print(f"send_document failed Part {index}: {e}", flush=True)
             sent = False
-    if not sent:
-        try:
-            await app.bot.send_message(CHANNEL_ID, caption + f"\n\n⚠️ Upload Failed ({size_mb:.1f} MB)")
-        except Exception as e:
-            print(f"send_message fallback failed: {e}", flush=True)
     try:
         os.remove(part_path)
     except:
@@ -557,48 +549,73 @@ async def process_stream(entry, app):
     platform, uid = parse_entry(entry)
     base_name = f"{platform}_{uid.lstrip('@')}_{int(time.time())}"
     print(f"LIVE Detected : {entry} -> Starting Record", flush=True)
-    try:
-        await app.bot.send_message(CHANNEL_ID,
-            f"🔴 𝗟𝗜𝗩𝗘 𝗦𝘁𝗮𝗿𝘁𝗲𝗱!\n\n"
-            f"🎬 {display_name(entry)}\n"
-            f"🔗 {get_url(entry)}\n"
-            f"🎞️ 360p30 | ⏳ Part 1 Soon..."
-        )
-    except Exception as e:
-        print(f"Start notify failed: {e}", flush=True)
-    try:
-        stream_url = get_stream_url(entry)
-        if not stream_url:
-            print(f"Recording Failed - No Stream URL : {entry}", flush=True)
+    uploaded = 0
+    uploaded_files = set()
+    retry = 0
+
+    while retry < 5:
+        try:
+            stream_url = get_stream_url(entry)
+            if not stream_url:
+                print(f"No Stream URL retry {retry} : {entry}", flush=True)
+                retry += 1
+                await asyncio.sleep(15)
+                continue
+
+            retry = 0
+            pattern = f"{base_name}_part%03d.mp4"
+            log_file = open(f"{base_name}_ffmpeg.log", "w")
+            ffmpeg_proc = subprocess.Popen(["ffmpeg", "-y", "-i", stream_url, "-c", "copy", "-f", "segment", "-segment_time", "600", "-segment_format", "mp4", "-reset_timestamps", "1", "-break_non_keyframes", "1", pattern], stdout=log_file, stderr=log_file)
+
+            while ffmpeg_proc.poll() is None:
+                await asyncio.sleep(20)
+                parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
+                for part_path in parts:
+                    if part_path in uploaded_files:
+                        continue
+                    if is_file_ready(part_path):
+                        uploaded += 1
+                        uploaded_files.add(part_path)
+                        try:
+                            await upload_one_part(entry, part_path, uploaded, app)
+                        except Exception as e:
+                            print(f"upload crash: {e}\n{traceback.format_exc()}", flush=True)
+
+            print(f"ffmpeg exited {ffmpeg_proc.poll()} for {entry} - Checking if still live", flush=True)
             try:
-                await app.bot.send_message(CHANNEL_ID, f"❌ Record Failed\n🎬 {display_name(entry)}")
+                log_file.close()
             except:
                 pass
-            RECORDING.discard(entry)
-            return
-        pattern = f"{base_name}_part%03d.mp4"
-        log_file = open(f"{base_name}_ffmpeg.log", "w")
-        ffmpeg_proc = subprocess.Popen(["ffmpeg", "-y", "-i", stream_url, "-c", "copy", "-f", "segment", "-segment_time", "600", "-segment_format", "mp4", "-reset_timestamps", "1", "-break_non_keyframes", "1", pattern], stdout=log_file, stderr=log_file)
-        uploaded = 0
-        uploaded_files = set()
-        while ffmpeg_proc.poll() is None:
-            await asyncio.sleep(20)
+
+            await asyncio.sleep(5)
             parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
             for part_path in parts:
                 if part_path in uploaded_files:
                     continue
-                if is_file_ready(part_path):
-                    uploaded += 1
-                    uploaded_files.add(part_path)
-                    try:
-                        await upload_one_part(entry, part_path, uploaded, app)
-                    except Exception as e:
-                        print(f"upload crash: {e}\n{traceback.format_exc()}", flush=True)
-        print(f"ffmpeg exited {ffmpeg_proc.poll()} for {entry}", flush=True)
-        try:
-            log_file.close()
-        except:
-            pass
+                if os.path.exists(part_path) and os.path.getsize(part_path) > 1000:
+                    if is_file_ready(part_path):
+                        uploaded += 1
+                        uploaded_files.add(part_path)
+                        try:
+                            await upload_one_part(entry, part_path, uploaded, app)
+                        except Exception as e:
+                            print(f"Final upload crash: {e}", flush=True)
+
+            if not is_live(entry):
+                print(f"Live really ended : {entry}", flush=True)
+                break
+
+            print(f"Stream disconnected but still live, reconnecting : {entry} - Part will continue as Part {uploaded + 1}", flush=True)
+            await asyncio.sleep(10)
+            continue
+
+        except Exception as e:
+            print(f"process_stream CRASH {entry}: {e}\n{traceback.format_exc()}", flush=True)
+            retry += 1
+            await asyncio.sleep(10)
+            continue
+
+    try:
         await asyncio.sleep(3)
         parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
         for part_path in parts:
@@ -611,16 +628,8 @@ async def process_stream(entry, app):
                     await upload_one_part(entry, part_path, uploaded, app)
                 except Exception as e:
                     print(f"Final upload crash: {e}", flush=True)
-        try:
-            await app.bot.send_message(CHANNEL_ID,
-                f"✅ 𝗟𝗶𝘃𝗲 𝗙𝗶𝗻𝗶𝘀𝗵𝗲𝗱!\n\n"
-                f"🎬 {display_name(entry)}\n"
-                f"📂 Total Parts: {uploaded}"
-            )
-        except:
-            pass
-    except Exception as e:
-        print(f"process_stream CRASH {entry}: {e}\n{traceback.format_exc()}", flush=True)
+    except:
+        pass
     finally:
         RECORDING.discard(entry)
 
