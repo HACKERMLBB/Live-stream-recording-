@@ -21,12 +21,14 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 USERNAMES_FILE = "usernames.json"
 
 # ==================================================
-# 🌐 PLATFORMS - m.nimo.tv
+# 🌐 PLATFORMS - Twitch / Kick / Nimo / 17Live
 # ==================================================
 PLATFORMS = {
     "twitch": "https://twitch.tv/{id}",
     "kick": "https://kick.com/{id}",
     "nimo": "https://m.nimo.tv/live/{id}",
+    "17live": "https://17.live/en/live/{id}",
+    "17": "https://17.live/en/live/{id}",
 }
 
 HEADERS = {
@@ -36,11 +38,27 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
+HEADERS_17 = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://17.live/",
+    "Origin": "https://17.live",
+    "Accept": "application/json, text/plain, */*",
+}
+
 def parse_entry(entry):
     entry = entry.strip()
     low = entry.lower()
 
-    # 🔥 FULL LINK SUPPORT - https://m.nimo.tv/live/12345678
+    # 🔥 17LIVE FULL LINK - https://17.live/en/live/123456 / https://17.live/live/123456
+    if "17.live" in low or "17live" in low:
+        m = re.search(r"17\.live/(?:en/)?(?:live/)?([a-z0-9_\-]+)", low)
+        if m:
+            return "17live", m.group(1)
+        m = re.search(r"17live[: ]+([a-z0-9_\-]+)", low)
+        if m:
+            return "17live", m.group(1)
+
+    # 🔥 NIMO FULL LINK - https://m.nimo.tv/live/12345678
     if "nimo.tv" in low:
         m = re.search(r"nimo\.tv/(?:live/)?(\d+)", low)
         if m:
@@ -64,6 +82,9 @@ def parse_entry(entry):
         platform, uid = entry.split(":", 1)
         platform = platform.strip()
         uid = uid.strip()
+        # 17 -> 17live normalize
+        if platform == "17":
+            platform = "17live"
         if platform not in PLATFORMS:
             platform = "twitch"
     else:
@@ -72,6 +93,8 @@ def parse_entry(entry):
     return platform, uid
 
 def make_entry(platform, uid):
+    if platform == "17":
+        platform = "17live"
     return f"{platform}:{uid}"
 
 def get_url(entry):
@@ -85,6 +108,12 @@ def get_all_urls(entry):
             f"https://m.nimo.tv/live/{uid}",
             f"https://m.nimo.tv/{uid}",
             f"https://www.nimo.tv/live/{uid}",
+        ]
+    if platform == "17live":
+        return [
+            f"https://17.live/en/live/{uid}",
+            f"https://17.live/live/{uid}",
+            f"https://17.live/en/streams/{uid}",
         ]
     return [get_url(entry)]
 
@@ -100,7 +129,7 @@ if os.path.exists(USERNAMES_FILE):
             if ":" not in str(u):
                 migrated.append(make_entry("twitch", str(u)))
             else:
-                migrated.append(str(u).lower())
+                migrated.append(str(u).lower().replace("17:", "17live:"))
         USERNAMES = migrated
     except Exception:
         USERNAMES = []
@@ -125,11 +154,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Heyy Welcome Baby 😍🔥\n"
         "\n"
         "🔴🎥 Auto Record Lives\n"
-        "🎞️ 360p Clear Quality\n"
+        "🎞️ 360p30 Clear Quality\n"
         "✂️ 10 Min Parts\n"
         "☁️ Mixdrop Backup\n"
         "\n"
-        "🌐 Twitch 💜 | Kick 💚 | Nimo 💛\n"
+        "🌐 Twitch 💜 | Kick 💚 | Nimo 💛 | 17Live 💖\n"
         "\n"
         "💖 Yoon Got You Covered 🚀✨"
     )
@@ -140,7 +169,9 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "⚠️ Usage:\n"
             "/add https://m.nimo.tv/live/12345678\n"
+            "/add https://17.live/en/live/123456\n"
             "/add nimo:12345678\n"
+            "/add 17live:username\n"
             "/add kick:username\n"
             "/add username"
         )
@@ -158,7 +189,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎬 {display_name(entry)}\n"
             f"🔗 Link : {get_url(entry)}\n"
             f"🔴 Auto Record : ON\n"
-            f"🎞️ Quality : 360p"
+            f"🎞️ Quality : 360p30"
         )
     else:
         await update.message.reply_text(f"ℹ️ Already Added : {display_name(entry)}")
@@ -176,7 +207,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status = "🔴 REC" if user in RECORDING else "⏳ Waiting"
         text += f"• {display_name(user)} — {status}\n"
 
-    text += "\n🎞️ Quality : 360p\n✂️ Parts : 10 Min Each"
+    text += "\n🎞️ Quality : 360p30\n✂️ Parts : 10 Min Each"
     await update.message.reply_text(text)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -186,7 +217,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "🔴 ─── Currently Recording ─── 🔴\n\n"
     for user in RECORDING:
-        text += f"🎥 {display_name(user)} — 360p\n"
+        text += f"🎥 {display_name(user)} — 360p30\n"
 
     await update.message.reply_text(text)
 
@@ -205,7 +236,6 @@ def get_nimo_info(room_id):
         try:
             r = requests.get(api_url, headers=HEADERS, timeout=15)
             if r.status_code != 200:
-                print(f"Nimo API Fail {r.status_code} : {api_url}")
                 continue
             data = r.json()
             print(f"Nimo API : {api_url} -> {str(data)[:500]}")
@@ -247,7 +277,6 @@ def extract_nimo_stream_urls(room, full_data):
             for vv in v.values():
                 if isinstance(vv, str) and vv.startswith("http"):
                     urls.append(vv)
-
     for key in ["streamInfo", "liveStream", "streams"]:
         obj = room.get(key) or full_data.get(key)
         if isinstance(obj, dict):
@@ -260,7 +289,6 @@ def extract_nimo_stream_urls(room, full_data):
                     for vv in item.values():
                         if isinstance(vv, str) and vv.startswith("http"):
                             urls.append(vv)
-
     m3u8 = [u for u in urls if ".m3u8" in u]
     flv = [u for u in urls if ".flv" in u]
     if m3u8:
@@ -268,6 +296,53 @@ def extract_nimo_stream_urls(room, full_data):
     if flv:
         return flv
     return urls
+
+# ==================================================
+# 🔥 17LIVE API
+# ==================================================
+
+def get_17live_info(uid):
+    # 17Live - Try API + yt-dlp / streamlink fallback in get_stream_url
+    urls = [
+        f"https://wap-api.17app.co/api/v1/liveStreams/getLiveStreamInfo?liveStreamID={uid}",
+        f"https://api.17.live/api/v1/liveStreams/getLiveStreamInfo?liveStreamID={uid}",
+        f"https://wap-api.17app.co/api/v1/lives/{uid}",
+        f"https://api.17.live/api/v1/users/{uid}/liveStream",
+    ]
+    for api_url in urls:
+        try:
+            r = requests.get(api_url, headers=HEADERS_17, timeout=15)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            print(f"17Live API : {api_url} -> {str(data)[:500]}")
+            d = data.get("data", data)
+            if not isinstance(d, dict):
+                continue
+            # Look for stream urls inside
+            found = []
+            def scan(obj):
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if isinstance(v, str) and v.startswith("http") and (".m3u8" in v or ".flv" in v or ".mp4" in v):
+                            found.append(v)
+                        else:
+                            scan(v)
+                elif isinstance(obj, list):
+                    for it in obj:
+                        scan(it)
+            scan(d)
+            if found:
+                # Prefer m3u8
+                m3u8 = [u for u in found if ".m3u8" in u]
+                return True, m3u8 if m3u8 else found
+            # isLive check
+            if d.get("isLive") in [1, True, "1"] or d.get("liveStatus") in [1, True]:
+                return True, []
+        except Exception as e:
+            print(f"17Live API Error {api_url} : {e}")
+            continue
+    return False, []
 
 # ==================================================
 # ☁️ HELPERS
@@ -296,10 +371,23 @@ def is_live(entry):
         live, _ = get_nimo_info(uid)
         print(f"Nimo is_live {uid} : {live}")
         return live
+    if platform == "17live":
+        live, urls = get_17live_info(uid)
+        if live:
+            return True
+        # Fallback to streamlink / yt-dlp - 17Live works with these too
+        for url in get_all_urls(entry):
+            r = subprocess.run(["streamlink", url, "360p30,360p,best", "--stream-url"], capture_output=True, text=True, timeout=30)
+            if r.stdout.strip().startswith("http"):
+                return True
+            r2 = subprocess.run(["yt-dlp", url, "--skip-download", "--quiet"], capture_output=True, timeout=30)
+            if r2.returncode == 0:
+                return True
+        return False
 
     for url in get_all_urls(entry):
         result = subprocess.run(
-            ["streamlink", url, "360p,best", "--stream-url"],
+            ["streamlink", url, "360p30,360p,best", "--stream-url"],
             capture_output=True, text=True, timeout=30
         )
         if result.stdout.strip().startswith("http"):
@@ -321,15 +409,21 @@ def get_stream_url(entry):
             return urls[0]
         for url in get_all_urls(entry):
             result = subprocess.run(
-                ["streamlink", url, "360p,best", "--stream-url"],
+                ["streamlink", url, "360p30,360p,best", "--stream-url"],
                 capture_output=True, text=True, timeout=30
             )
             if result.stdout.strip().startswith("http"):
                 return result.stdout.strip()
         return None
 
+    if platform == "17live":
+        live, urls = get_17live_info(uid)
+        if urls:
+            print(f"17Live Stream URL Found : {urls[0][:120]}")
+            return urls[0]
+
     for url in get_all_urls(entry):
-        for quality in ["360p", "360p30", "best"]:
+        for quality in ["360p30", "360p", "best"]:
             result = subprocess.run(
                 ["streamlink", url, quality, "--stream-url"],
                 capture_output=True, text=True, timeout=30
@@ -337,7 +431,7 @@ def get_stream_url(entry):
             if result.stdout.strip().startswith("http"):
                 return result.stdout.strip()
         result = subprocess.run(
-            ["yt-dlp", url, "-f", "best[height<=360]", "-g"],
+            ["yt-dlp", url, "-f", "best[height<=360][fps<=30]/best[height<=360]/best", "-g"],
             capture_output=True, text=True, timeout=30
         )
         stream_url = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
@@ -346,7 +440,7 @@ def get_stream_url(entry):
     return None
 
 # ==================================================
-# 🎬 VIDEO + CAPTION ONLY
+# 🎬 VIDEO + CAPTION ONLY - PART FIX
 # ==================================================
 
 async def upload_one_part(entry, part_path, index, app):
@@ -357,7 +451,7 @@ async def upload_one_part(entry, part_path, index, app):
             f"🎬 {display_name(entry)}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📂 Part : {index}\n"
-            f"🎞️ Quality : 360p\n"
+            f"🎞️ Quality : 360p30\n"
             f"🔗 Mixdrop Part {index} :\n{mixdrop_link}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"▶️ Part {index} — Watch Here ✨"
@@ -367,7 +461,7 @@ async def upload_one_part(entry, part_path, index, app):
             f"🎬 {display_name(entry)}\n"
             f"━━━━━━━━━━━━━━━\n"
             f"📂 Part : {index}\n"
-            f"🎞️ Quality : 360p\n"
+            f"🎞️ Quality : 360p30\n"
             f"❌ Mixdrop Part {index} : Upload Failed\n"
             f"━━━━━━━━━━━━━━━\n"
             f"▶️ Part {index} — Watch Here ✨"
@@ -383,6 +477,25 @@ async def upload_one_part(entry, part_path, index, app):
     os.remove(part_path)
     print(f"Uploaded Part {index} : {entry}")
 
+def is_file_ready(part_path):
+    # File is ready if size stable for 3 sec AND not modified in last 5 sec
+    try:
+        if not os.path.exists(part_path):
+            return False
+        if os.path.getsize(part_path) < 1000:
+            return False
+        mtime = os.path.getmtime(part_path)
+        if time.time() - mtime < 5:
+            return False
+        size1 = os.path.getsize(part_path)
+        time.sleep(2)
+        if not os.path.exists(part_path):
+            return False
+        size2 = os.path.getsize(part_path)
+        return size1 == size2
+    except Exception:
+        return False
+
 async def process_stream(entry, app):
     platform, uid = parse_entry(entry)
     base_name = f"{platform}_{uid}_{int(time.time())}"
@@ -397,29 +510,33 @@ async def process_stream(entry, app):
     pattern = f"{base_name}_part%03d.mp4"
     log_file = open(f"{base_name}_ffmpeg.log", "w")
 
+    # 🔥 FIX : break_non_keyframes + segment_time works even with -c copy
     ffmpeg_proc = subprocess.Popen([
         "ffmpeg", "-y", "-i", stream_url,
         "-c", "copy",
         "-f", "segment",
         "-segment_time", "600",
-        "-reset_timestamps", "1",
         "-segment_format", "mp4",
+        "-reset_timestamps", "1",
+        "-break_non_keyframes", "1",
         pattern
     ], stdout=log_file, stderr=log_file)
 
     uploaded = 0
+    uploaded_files = set()
+
+    # 🔥 While recording - upload any READY file, not just parts[:-1]
     while ffmpeg_proc.poll() is None:
-        await asyncio.sleep(30)
+        await asyncio.sleep(20)
         parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
-        ready_parts = parts[:-1] if len(parts) > 1 else []
-        for part_path in ready_parts:
-            size1 = os.path.getsize(part_path)
-            await asyncio.sleep(2)
-            if not os.path.exists(part_path):
+        for part_path in parts:
+            if part_path in uploaded_files:
                 continue
-            size2 = os.path.getsize(part_path)
-            if size1 == size2 and size1 > 1000:
+            # If ffmpeg still running, skip the newest file ONLY if it is still growing
+            # Old files will be ready even if they are last in list
+            if is_file_ready(part_path):
                 uploaded += 1
+                uploaded_files.add(part_path)
                 await upload_one_part(entry, part_path, uploaded, app)
 
     print(f"ffmpeg exited {ffmpeg_proc.poll()} for {entry}")
@@ -429,10 +546,14 @@ async def process_stream(entry, app):
         pass
 
     await asyncio.sleep(3)
+    # 🔥 After end - upload ALL remaining parts in order
     parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
     for part_path in parts:
+        if part_path in uploaded_files:
+            continue
         if os.path.exists(part_path) and os.path.getsize(part_path) > 1000:
             uploaded += 1
+            uploaded_files.add(part_path)
             await upload_one_part(entry, part_path, uploaded, app)
 
     RECORDING.discard(entry)
