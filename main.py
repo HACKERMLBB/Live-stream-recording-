@@ -26,7 +26,8 @@ MAX_TELEGRAM_SIZE = 50 * 1024 * 1024
 PLATFORMS = {
     "twitch": "https://twitch.tv/{id}",
     "kick": "https://kick.com/{id}",
-    "nimo": "https://m.nimo.tv/live/{id}",
+    # Nimo: Streamlink එකට www ඕන, Browser එකට m ඕන - දෙකම Try කරනවා
+    "nimo": "https://www.nimo.tv/{id}",
 }
 
 def parse_entry(entry):
@@ -48,6 +49,17 @@ def make_entry(platform, uid):
 def get_url(entry):
     platform, uid = parse_entry(entry)
     return PLATFORMS[platform].format(id=uid)
+
+def get_all_urls(entry):
+    # Nimo එකට URL 2ක් Return කරනවා, අනිත් ඒවට 1යි
+    platform, uid = parse_entry(entry)
+    if platform == "nimo":
+        return [
+            f"https://www.nimo.tv/{uid}",
+            f"https://www.nimo.tv/live/{uid}",
+            f"https://m.nimo.tv/live/{uid}",
+        ]
+    return [get_url(entry)]
 
 def display_name(entry):
     platform, uid = parse_entry(entry)
@@ -173,39 +185,48 @@ def upload_to_mixdrop(file_path):
     return None
 
 def is_live(entry):
-    url = get_url(entry)
-    result = subprocess.run(
-        ["streamlink", url, "--json"],
-        capture_output=True, text=True
-    )
-    if "No playable streams" not in result.stdout and result.returncode == 0:
-        return True
-    result2 = subprocess.run(
-        ["yt-dlp", url, "--skip-download", "--quiet"],
-        capture_output=True
-    )
-    return result2.returncode == 0
+    # Nimo එකට URL 3ක්ම Try කරනවා
+    for url in get_all_urls(entry):
+        result = subprocess.run(
+            ["streamlink", url, "--json"],
+            capture_output=True, text=True
+        )
+        # Streamlink එකේ JSON එකේ streams තියෙනවද බලනවා
+        if result.returncode == 0 and "No playable streams" not in result.stdout and "streams" in result.stdout and '"streams": {}' not in result.stdout:
+            print(f"is_live TRUE via streamlink: {url}")
+            return True
+        # yt-dlp එකෙනුත් Try කරනවා
+        result2 = subprocess.run(
+            ["yt-dlp", url, "--skip-download", "--quiet"],
+            capture_output=True
+        )
+        if result2.returncode == 0:
+            print(f"is_live TRUE via yt-dlp: {url}")
+            return True
+    print(f"is_live FALSE: {entry}")
+    return False
 
 def record_stream(entry, output_path):
-    url = get_url(entry)
-    print(f"[1/3] Trying Streamlink 360p for {entry}...")
-    subprocess.run(["streamlink", url, "360p", "-o", output_path])
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-        return True
-    if os.path.exists(output_path):
-        os.remove(output_path)
-    print(f"[1/3] Trying Streamlink 360p30 for {entry}...")
-    subprocess.run(["streamlink", url, "360p30", "-o", output_path])
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-        return True
-    if os.path.exists(output_path):
-        os.remove(output_path)
-    print(f"[2/3] Trying yt-dlp for {entry}...")
-    subprocess.run(["yt-dlp", url, "-f", "best[height<=360]", "-o", output_path, "--no-part"])
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-        return True
-    if os.path.exists(output_path):
-        os.remove(output_path)
+    # Nimo එකට URL 3ක්ම, අනිත් ඒවට URL 1යි - හැම URL එකටම 360p -> 360p30 Try කරනවා
+    for url in get_all_urls(entry):
+        print(f"Trying Streamlink 360p for {entry} via {url}...")
+        subprocess.run(["streamlink", url, "360p", "-o", output_path])
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            return True
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        print(f"Trying Streamlink 360p30 for {entry} via {url}...")
+        subprocess.run(["streamlink", url, "360p30", "-o", output_path])
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            return True
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        print(f"Trying yt-dlp for {entry} via {url}...")
+        subprocess.run(["yt-dlp", url, "-f", "best[height<=360]", "-o", output_path, "--no-part"])
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            return True
+        if os.path.exists(output_path):
+            os.remove(output_path)
     return False
 
 async def upload_and_send(entry, base_name, full_path, app):
