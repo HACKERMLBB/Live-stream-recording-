@@ -26,7 +26,6 @@ MAX_TELEGRAM_SIZE = 50 * 1024 * 1024
 PLATFORMS = {
     "twitch": "https://twitch.tv/{id}",
     "kick": "https://kick.com/{id}",
-    # Nimo: Streamlink එකට www ඕන, Browser එකට m ඕන - දෙකම Try කරනවා
     "nimo": "https://www.nimo.tv/{id}",
 }
 
@@ -51,7 +50,6 @@ def get_url(entry):
     return PLATFORMS[platform].format(id=uid)
 
 def get_all_urls(entry):
-    # Nimo එකට URL 2ක් Return කරනවා, අනිත් ඒවට 1යි
     platform, uid = parse_entry(entry)
     if platform == "nimo":
         return [
@@ -99,7 +97,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/list - 📋 Show all accounts\n"
         "/status - 🔴 Check recording status\n\n"
         "🎞️ Quality: 360p\n"
-        "✂️ Split: 50MB Parts\n"
+        "✂️ Live Upload: Upload when 50MB reached\n"
         "☁️ Upload: Mixdrop + Telegram\n\n"
         "🌐 Platforms: ONLY 3\n"
         "twitch, kick, nimo\n\n"
@@ -123,7 +121,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Added: {display_name(entry)}\n"
             f"🔴 Auto Record is now ON - 360p\n"
-            f"📁 File will be uploaded after live ends."
+            f"📁 50MB parts will be uploaded while live."
         )
     else:
         await update.message.reply_text(f"ℹ️ {display_name(entry)} is already added.")
@@ -155,7 +153,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in USERNAMES:
         status = "🔴 REC" if user in RECORDING else "⏳ Waiting"
         text += f"{display_name(user)} - {status}\n"
-    text += "\n🎞️ Quality: 360p\n✂️ Split: 50MB"
+    text += "\n🎞️ Quality: 360p\n✂️ Live Upload: 50MB"
     await update.message.reply_text(text)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -164,7 +162,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     text = "🔴 Currently Recording:\n\n"
     for user in RECORDING:
-        text += f"🎥 Live: {display_name(user)} - 360p\n"
+        text += f"🎥 Live: {display_name(user)} - 360p (Live Upload ON)\n"
     await update.message.reply_text(text)
 
 # ================= HELPERS =================
@@ -185,17 +183,14 @@ def upload_to_mixdrop(file_path):
     return None
 
 def is_live(entry):
-    # Nimo එකට URL 3ක්ම Try කරනවා
     for url in get_all_urls(entry):
         result = subprocess.run(
             ["streamlink", url, "--json"],
             capture_output=True, text=True
         )
-        # Streamlink එකේ JSON එකේ streams තියෙනවද බලනවා
         if result.returncode == 0 and "No playable streams" not in result.stdout and "streams" in result.stdout and '"streams": {}' not in result.stdout:
             print(f"is_live TRUE via streamlink: {url}")
             return True
-        # yt-dlp එකෙනුත් Try කරනවා
         result2 = subprocess.run(
             ["yt-dlp", url, "--skip-download", "--quiet"],
             capture_output=True
@@ -206,96 +201,118 @@ def is_live(entry):
     print(f"is_live FALSE: {entry}")
     return False
 
-def record_stream(entry, output_path):
-    # Nimo එකට URL 3ක්ම, අනිත් ඒවට URL 1යි - හැම URL එකටම 360p -> 360p30 Try කරනවා
+def get_stream_url(entry):
+    # Get Direct HLS URL via Streamlink
     for url in get_all_urls(entry):
-        print(f"Trying Streamlink 360p for {entry} via {url}...")
-        subprocess.run(["streamlink", url, "360p", "-o", output_path])
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-            return True
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        print(f"Trying Streamlink 360p30 for {entry} via {url}...")
-        subprocess.run(["streamlink", url, "360p30", "-o", output_path])
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-            return True
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        print(f"Trying yt-dlp for {entry} via {url}...")
-        subprocess.run(["yt-dlp", url, "-f", "best[height<=360]", "-o", output_path, "--no-part"])
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-            return True
-        if os.path.exists(output_path):
-            os.remove(output_path)
-    return False
-
-async def upload_and_send(entry, base_name, full_path, app):
-    file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
-    await app.bot.send_message(
-        CHANNEL_ID,
-        f"🏁 Live Ended: {display_name(entry)}\n"
-        f"📦 File Size: {file_size_mb:.1f} MB (360p)\n"
-        f"✂️ Splitting into 50MB parts...\n"
-        f"🔄 Next Live can record now - Upload is in background."
-    )
-    subprocess.run([
-        "ffmpeg", "-y", "-i", full_path,
-        "-fs", str(MAX_TELEGRAM_SIZE),
-        "-c", "copy",
-        f"{base_name}_part%03d.mp4"
-    ])
-    parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
-    total_parts = len(parts)
-    for index, part_path in enumerate(parts, 1):
-        await app.bot.send_message(CHANNEL_ID, f"☁️ Uploading Part {index}/{total_parts} to Mixdrop... {display_name(entry)}")
-        mixdrop_link = upload_to_mixdrop(part_path)
-        if not mixdrop_link:
-            mixdrop_link = "Upload Failed"
-            await app.bot.send_message(CHANNEL_ID, f"❌ Mixdrop Upload Failed - Part {index}/{total_parts}: {display_name(entry)}")
-        else:
-            await app.bot.send_message(
-                CHANNEL_ID,
-                f"✅ Mixdrop Done - Part {index}/{total_parts}\n"
-                f"{display_name(entry)}\n"
-                f"🔗 Full Part Link: {mixdrop_link}"
+        for quality in ["360p", "360p30", "best"]:
+            result = subprocess.run(
+                ["streamlink", url, quality, "--stream-url"],
+                capture_output=True, text=True
             )
-        caption = (
-            f"🎬 Live Replay: {display_name(entry)} [360p]\n"
-            f"📂 Part {index}/{total_parts}\n"
-            f"🔗 Mixdrop Part {index}: {mixdrop_link}\n"
-            f"▶️ Part {index} - Watch Here"
+            stream_url = result.stdout.strip()
+            if stream_url.startswith("http"):
+                print(f"Got stream URL via streamlink {quality}: {url}")
+                return stream_url
+        # Get URL via yt-dlp
+        result = subprocess.run(
+            ["yt-dlp", url, "-f", "best[height<=360]", "-g"],
+            capture_output=True, text=True
         )
-        with open(part_path, "rb") as video:
-            await app.bot.send_video(
-                CHANNEL_ID,
-                video=video,
-                caption=caption,
-                supports_streaming=True
-            )
-        os.remove(part_path)
-        await asyncio.sleep(2)
-    if os.path.exists(full_path):
-        os.remove(full_path)
-    await app.bot.send_message(
-        CHANNEL_ID,
-        f"🎉 Completed: {display_name(entry)}\n"
-        f"📂 Total Parts: {total_parts} x 50MB\n"
-        f"🎞️ Quality: 360p\n"
-        f"✅ Enjoy!"
+        stream_url = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
+        if stream_url.startswith("http"):
+            print(f"Got stream URL via yt-dlp: {url}")
+            return stream_url
+    return None
+
+async def upload_one_part(entry, part_path, index, app):
+    # Function to upload one part
+    size_mb = os.path.getsize(part_path) / (1024 * 1024)
+    await app.bot.send_message(CHANNEL_ID, f"☁️ Uploading Part {index} ({size_mb:.1f} MB)... {display_name(entry)}\n🎥 Next part is recording...")
+    mixdrop_link = upload_to_mixdrop(part_path)
+    if not mixdrop_link:
+        mixdrop_link = "Upload Failed"
+        await app.bot.send_message(CHANNEL_ID, f"❌ Mixdrop Failed - Part {index}: {display_name(entry)}")
+    else:
+        await app.bot.send_message(
+            CHANNEL_ID,
+            f"✅ Mixdrop Done - Part {index}\n"
+            f"{display_name(entry)}\n"
+            f"🔗 {mixdrop_link}"
+        )
+    caption = (
+        f"🎬 Live Replay: {display_name(entry)} [360p]\n"
+        f"📂 Part {index}\n"
+        f"🔗 Mixdrop Part {index}: {mixdrop_link}\n"
+        f"▶️ Part {index} - Watch Here"
     )
+    with open(part_path, "rb") as video:
+        await app.bot.send_video(
+            CHANNEL_ID,
+            video=video,
+            caption=caption,
+            supports_streaming=True
+        )
+    os.remove(part_path)
 
 async def process_stream(entry, app):
     platform, uid = parse_entry(entry)
     base_name = f"{platform}_{uid}_{int(time.time())}"
-    full_path = f"{base_name}_full.mp4"
-    await app.bot.send_message(CHANNEL_ID, f"🔴 LIVE Detected!\n{display_name(entry)}\n🎥 Recording Started... [360p]")
-    success = record_stream(entry, full_path)
-    if not success:
-        await app.bot.send_message(CHANNEL_ID, f"❌ Recording Failed: {display_name(entry)}")
+    await app.bot.send_message(CHANNEL_ID, f"🔴 LIVE Detected!\n{display_name(entry)}\n🎥 Recording Started... [360p]\n⚡ Live Upload ON - Upload when 50MB reached")
+
+    stream_url = get_stream_url(entry)
+    if not stream_url:
+        await app.bot.send_message(CHANNEL_ID, f"❌ Recording Failed (No Stream URL): {display_name(entry)}")
         RECORDING.discard(entry)
         return
+
+    # Split into 600 sec (10 min) parts with ffmpeg
+    # 360p 10 min = approx 35-50MB, fits Telegram 50MB limit
+    pattern = f"{base_name}_part%03d.mp4"
+    ffmpeg_proc = subprocess.Popen([
+        "ffmpeg", "-y", "-i", stream_url,
+        "-c", "copy",
+        "-f", "segment",
+        "-segment_time", "600",
+        "-reset_timestamps", "1",
+        "-segment_format", "mp4",
+        pattern
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    uploaded = 0
+    # Upload loop while live is running
+    while ffmpeg_proc.poll() is None:
+        await asyncio.sleep(30)
+        # Skip newest file, upload previous ones
+        parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
+        # Newest one is still recording, do not upload it
+        ready_parts = parts[:-1] if len(parts) > 1 else []
+        for part_path in ready_parts:
+            # Check if file size is stable, upload only if stable
+            size1 = os.path.getsize(part_path)
+            await asyncio.sleep(2)
+            if not os.path.exists(part_path):
+                continue
+            size2 = os.path.getsize(part_path)
+            if size1 == size2 and size1 > 1000:
+                uploaded += 1
+                await upload_one_part(entry, part_path, uploaded, app)
+
+    # Upload remaining parts after live ends
+    await asyncio.sleep(3)
+    parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
+    for part_path in parts:
+        if os.path.exists(part_path) and os.path.getsize(part_path) > 1000:
+            uploaded += 1
+            await upload_one_part(entry, part_path, uploaded, app)
+
     RECORDING.discard(entry)
-    await upload_and_send(entry, base_name, full_path, app)
+    await app.bot.send_message(
+        CHANNEL_ID,
+        f"🎉 Completed: {display_name(entry)}\n"
+        f"📂 Total Parts: {uploaded} x ~50MB\n"
+        f"🎞️ Quality: 360p\n"
+        f"✅ Enjoy!"
+    )
 
 def check_loop(app):
     while True:
@@ -321,7 +338,7 @@ def main():
     app.add_handler(CommandHandler("list", list_command))
     app.add_handler(CommandHandler("status", status_command))
     threading.Thread(target=check_loop, args=(app,), daemon=True).start()
-    print("Bot Running - 360p Mode... [Streamlink + yt-dlp]")
+    print("Bot Running - 360p Live Upload Mode... [Streamlink + ffmpeg segment]")
     app.run_polling()
 
 if __name__ == "__main__":
