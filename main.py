@@ -6,6 +6,7 @@ import glob
 import json
 import threading
 import asyncio
+import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -20,16 +21,45 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 USERNAMES_FILE = "usernames.json"
 
 # ==================================================
-# 🌐 PLATFORMS
+# 🌐 PLATFORMS - m.nimo.tv
 # ==================================================
 PLATFORMS = {
     "twitch": "https://twitch.tv/{id}",
     "kick": "https://kick.com/{id}",
-    "nimo": "https://www.nimo.tv/{id}",
+    "nimo": "https://m.nimo.tv/live/{id}",
+}
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "Referer": "https://m.nimo.tv/",
+    "Origin": "https://m.nimo.tv",
+    "Accept": "application/json, text/plain, */*",
 }
 
 def parse_entry(entry):
-    entry = entry.lower().replace("@", "").strip()
+    entry = entry.strip()
+    low = entry.lower()
+
+    # 🔥 FULL LINK SUPPORT - https://m.nimo.tv/live/12345678
+    if "nimo.tv" in low:
+        m = re.search(r"nimo\.tv/(?:live/)?(\d+)", low)
+        if m:
+            return "nimo", m.group(1)
+        m2 = re.search(r"nimo\.tv/(?:live/)?([a-z0-9_\-]+)", low)
+        if m2:
+            return "nimo", m2.group(1)
+
+    if "twitch.tv" in low:
+        m = re.search(r"twitch\.tv/([a-z0-9_\-]+)", low)
+        if m:
+            return "twitch", m.group(1)
+
+    if "kick.com" in low:
+        m = re.search(r"kick\.com/([a-z0-9_\-]+)", low)
+        if m:
+            return "kick", m.group(1)
+
+    entry = low.replace("@", "").strip()
     if ":" in entry:
         platform, uid = entry.split(":", 1)
         platform = platform.strip()
@@ -52,9 +82,9 @@ def get_all_urls(entry):
     platform, uid = parse_entry(entry)
     if platform == "nimo":
         return [
-            f"https://www.nimo.tv/{uid}",
-            f"https://www.nimo.tv/live/{uid}",
             f"https://m.nimo.tv/live/{uid}",
+            f"https://m.nimo.tv/{uid}",
+            f"https://www.nimo.tv/live/{uid}",
         ]
     return [get_url(entry)]
 
@@ -89,48 +119,19 @@ def save_usernames():
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
-        "╔══════════════════════╗\n"
-        "   🎬✨ YOON ✨🎬\n"
-        "   AUTO RECORDER 🤖💜\n"
-        "╚══════════════════════╝\n"
+        "🎬✨ 𝗬𝗢𝗢𝗡 ✨🎬\n"
+        "🤖 Auto Recorder 💜\n"
         "\n"
         "👋 Heyy Welcome Baby 😍🔥\n"
-        "✨ You Are In The Right Place ✨\n"
         "\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🌟 ─── WHAT I DO ─── 🌟\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🔴🎥 Auto Record Lives\n"
+        "🎞️ 360p Clear Quality\n"
+        "✂️ 10 Min Parts\n"
+        "☁️ Mixdrop Backup\n"
         "\n"
-        "🔴🎥 Auto Record Live Streams\n"
-        "🎞️✨ Super Clear 360p Quality\n"
-        "✂️📂 Auto Split 10 Min Parts\n"
-        "☁️🔗 Auto Upload To Mixdrop\n"
-        "📹💜 Auto Send To Channel\n"
+        "🌐 Twitch 💜 | Kick 💚 | Nimo 💛\n"
         "\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🌐 ─── PLATFORMS ─── 🌐\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "\n"
-        "💜 Twitch\n"
-        "💚 Kick\n"
-        "💛 Nimo TV\n"
-        "\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💎 ─── WHY YOON? ─── 💎\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "\n"
-        "⚡ Lightning Fast ⚡\n"
-        "🤖 24/7 Auto Working 🤖\n"
-        "🎯 No Missed Lives 🎯\n"
-        "🔥 Best Quality Ever 🔥\n"
-        "\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "\n"
-        "💖 Sit Back & Enjoy 💖\n"
-        "🍿 Your Lives Are Safe Here 🍿\n"
-        "🚀 Yoon Got You Covered 🚀\n"
-        "\n"
-        "✨💜 Made With Love - YOON 💜✨"
+        "💖 Yoon Got You Covered 🚀✨"
     )
     await update.message.reply_text(message)
 
@@ -138,13 +139,14 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
             "⚠️ Usage:\n"
-            "/add username\n"
+            "/add https://m.nimo.tv/live/12345678\n"
+            "/add nimo:12345678\n"
             "/add kick:username\n"
-            "/add nimo:RoomID"
+            "/add username"
         )
         return
 
-    raw = " ".join(context.args).lower().strip()
+    raw = " ".join(context.args).strip()
     platform, uid = parse_entry(raw)
     entry = make_entry(platform, uid)
 
@@ -154,6 +156,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Added Successfully!\n\n"
             f"🎬 {display_name(entry)}\n"
+            f"🔗 Link : {get_url(entry)}\n"
             f"🔴 Auto Record : ON\n"
             f"🎞️ Quality : 360p"
         )
@@ -188,74 +191,158 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 # ==================================================
-# ☁️ HELPERS - MIXDROP WITH EMAIL
+# 🔥 NIMO API - m.nimo.tv
+# ==================================================
+
+def get_nimo_info(room_id):
+    urls = [
+        f"https://m.nimo.tv/api/v1/live/room?roomId={room_id}",
+        f"https://m.nimo.tv/api/live/room?roomId={room_id}",
+        f"https://m.nimo.tv/api/v1/room/detail?roomId={room_id}",
+        f"https://m.nimo.tv/api/v1/live/detail?roomId={room_id}",
+    ]
+    for api_url in urls:
+        try:
+            r = requests.get(api_url, headers=HEADERS, timeout=15)
+            if r.status_code != 200:
+                print(f"Nimo API Fail {r.status_code} : {api_url}")
+                continue
+            data = r.json()
+            print(f"Nimo API : {api_url} -> {str(data)[:500]}")
+            d = data.get("data", {})
+            if not d:
+                d = data
+            room = d.get("room", d)
+            stream_urls = extract_nimo_stream_urls(room, d)
+            if stream_urls:
+                return True, stream_urls
+            status = room.get("liveStatus", room.get("status", room.get("isLive", 0)))
+            if status in [1, "1", True, "live"]:
+                return True, stream_urls
+        except Exception as e:
+            print(f"Nimo API Error {api_url} : {e}")
+            continue
+    return False, []
+
+def extract_nimo_stream_urls(room, full_data):
+    urls = []
+    keys = [
+        "liveStreamUrl", "streamUrl", "hlsUrl", "m3u8Url",
+        "playUrl", "flvUrl", "rtmpUrl", "liveUrl",
+        "streamUrls", "playUrls", "urls",
+    ]
+    for k in keys:
+        v = room.get(k) or full_data.get(k)
+        if isinstance(v, str) and v.startswith("http"):
+            urls.append(v)
+        elif isinstance(v, list):
+            for item in v:
+                if isinstance(item, str) and item.startswith("http"):
+                    urls.append(item)
+                elif isinstance(item, dict):
+                    for vv in item.values():
+                        if isinstance(vv, str) and vv.startswith("http"):
+                            urls.append(vv)
+        elif isinstance(v, dict):
+            for vv in v.values():
+                if isinstance(vv, str) and vv.startswith("http"):
+                    urls.append(vv)
+
+    for key in ["streamInfo", "liveStream", "streams"]:
+        obj = room.get(key) or full_data.get(key)
+        if isinstance(obj, dict):
+            for vv in obj.values():
+                if isinstance(vv, str) and vv.startswith("http"):
+                    urls.append(vv)
+        elif isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, dict):
+                    for vv in item.values():
+                        if isinstance(vv, str) and vv.startswith("http"):
+                            urls.append(vv)
+
+    m3u8 = [u for u in urls if ".m3u8" in u]
+    flv = [u for u in urls if ".flv" in u]
+    if m3u8:
+        return m3u8
+    if flv:
+        return flv
+    return urls
+
+# ==================================================
+# ☁️ HELPERS
 # ==================================================
 
 def upload_to_mixdrop(file_path):
     try:
         print(f"Mixdrop Upload Start : {file_path}")
-        print(f"Email Set : {bool(MIXDROP_EMAIL)} | Key Set : {bool(MIXDROP_KEY)}")
-
         with open(file_path, "rb") as f:
             response = requests.post(
                 "https://ul.mixdrop.ag/api",
-                data={
-                    "email": MIXDROP_EMAIL,
-                    "key": MIXDROP_KEY,
-                },
+                data={"email": MIXDROP_EMAIL, "key": MIXDROP_KEY},
                 files={"file": f},
                 timeout=3600
             ).json()
-
         print(f"Mixdrop Response : {response}")
         if response.get("success"):
             return response["result"]["url"]
-        else:
-            print(f"Mixdrop Failed : {response.get('error', 'Unknown Error')}")
     except Exception as e:
         print(f"Mixdrop Error : {e}")
     return None
 
 def is_live(entry):
     platform, uid = parse_entry(entry)
+    if platform == "nimo":
+        live, _ = get_nimo_info(uid)
+        print(f"Nimo is_live {uid} : {live}")
+        return live
+
     for url in get_all_urls(entry):
         result = subprocess.run(
             ["streamlink", url, "360p,best", "--stream-url"],
             capture_output=True, text=True, timeout=30
         )
-        stream_url = result.stdout.strip()
-        if stream_url.startswith("http"):
+        if result.stdout.strip().startswith("http"):
             return True
-
-        if platform != "nimo":
-            result2 = subprocess.run(
-                ["yt-dlp", url, "--skip-download", "--quiet"],
-                capture_output=True, timeout=30
-            )
-            if result2.returncode == 0:
-                return True
+        result2 = subprocess.run(
+            ["yt-dlp", url, "--skip-download", "--quiet"],
+            capture_output=True, timeout=30
+        )
+        if result2.returncode == 0:
+            return True
     return False
 
 def get_stream_url(entry):
+    platform, uid = parse_entry(entry)
+    if platform == "nimo":
+        live, urls = get_nimo_info(uid)
+        if urls:
+            print(f"Nimo Stream URL Found : {urls[0][:120]}")
+            return urls[0]
+        for url in get_all_urls(entry):
+            result = subprocess.run(
+                ["streamlink", url, "360p,best", "--stream-url"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.stdout.strip().startswith("http"):
+                return result.stdout.strip()
+        return None
+
     for url in get_all_urls(entry):
         for quality in ["360p", "360p30", "best"]:
             result = subprocess.run(
                 ["streamlink", url, quality, "--stream-url"],
                 capture_output=True, text=True, timeout=30
             )
-            stream_url = result.stdout.strip()
-            if stream_url.startswith("http"):
-                return stream_url
-
-        platform, _ = parse_entry(entry)
-        if platform != "nimo":
-            result = subprocess.run(
-                ["yt-dlp", url, "-f", "best[height<=360]", "-g"],
-                capture_output=True, text=True, timeout=30
-            )
-            stream_url = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
-            if stream_url.startswith("http"):
-                return stream_url
+            if result.stdout.strip().startswith("http"):
+                return result.stdout.strip()
+        result = subprocess.run(
+            ["yt-dlp", url, "-f", "best[height<=360]", "-g"],
+            capture_output=True, text=True, timeout=30
+        )
+        stream_url = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
+        if stream_url.startswith("http"):
+            return stream_url
     return None
 
 # ==================================================
@@ -293,7 +380,6 @@ async def upload_one_part(entry, part_path, index, app):
             caption=caption,
             supports_streaming=True
         )
-
     os.remove(part_path)
     print(f"Uploaded Part {index} : {entry}")
 
@@ -322,12 +408,10 @@ async def process_stream(entry, app):
     ], stdout=log_file, stderr=log_file)
 
     uploaded = 0
-
     while ffmpeg_proc.poll() is None:
         await asyncio.sleep(30)
         parts = sorted(glob.glob(f"{base_name}_part*.mp4"))
         ready_parts = parts[:-1] if len(parts) > 1 else []
-
         for part_path in ready_parts:
             size1 = os.path.getsize(part_path)
             await asyncio.sleep(2)
@@ -354,10 +438,6 @@ async def process_stream(entry, app):
     RECORDING.discard(entry)
     print(f"Completed : {entry} - Total {uploaded} parts")
 
-# ==================================================
-# 🔄 CHECK LOOP
-# ==================================================
-
 def check_loop(app, loop):
     while True:
         for username in list(USERNAMES):
@@ -366,23 +446,12 @@ def check_loop(app, loop):
                 asyncio.run_coroutine_threadsafe(process_stream(username, app), loop)
         time.sleep(60)
 
-# ==================================================
-# 🚀 MAIN
-# ==================================================
-
 def main():
     if not BOT_TOKEN:
         print("BOT_TOKEN missing!")
         return
-
     from telegram.request import HTTPXRequest
-    request = HTTPXRequest(
-        read_timeout=600,
-        write_timeout=600,
-        connect_timeout=60,
-        pool_timeout=600
-    )
-
+    request = HTTPXRequest(read_timeout=600, write_timeout=600, connect_timeout=60, pool_timeout=600)
     app = Application.builder().token(BOT_TOKEN).request(request).build()
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("add", add_command))
@@ -391,7 +460,6 @@ def main():
 
     loop = asyncio.get_event_loop()
     threading.Thread(target=check_loop, args=(app, loop), daemon=True).start()
-
     print("Bot Running - VIDEO + CAPTION ONLY Mode...")
     app.run_polling()
 
