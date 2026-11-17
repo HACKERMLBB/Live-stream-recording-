@@ -4,10 +4,8 @@ import json
 import os
 import re
 import subprocess
-import threading
 import time
 import traceback
-from pathlib import Path
 
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
@@ -44,85 +42,59 @@ PLATFORMS = {
 }
 
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Linux; Android 11; Pixel 5) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Mobile Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     "Referer": "https://m.nimo.tv/",
     "Origin": "https://m.nimo.tv",
     "Accept": "application/json, text/plain, */*",
 }
 
 HEADERS_17 = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Referer": "https://17.live/",
     "Origin": "https://17.live",
     "Accept": "application/json, text/plain, */*",
 }
 
 HEADERS_SOOP = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Referer": "https://play.sooplive.com/",
     "Origin": "https://play.sooplive.com",
     "Accept": "application/json, text/plain, */*",
 }
 
-# Эдгээр нь bot-ын event loop дотор л ашиглагдана.
 USERNAMES = []
 RECORDING = set()
 
 
-def normalize_platform(platform):
-    aliases = {
+def normalize_platform(platform: str) -> str:
+    alias_map = {
         "17": "17live",
         "afreeca": "soop",
         "yt": "youtube",
     }
-    platform = platform.strip().lower()
-    return aliases.get(platform, platform)
+    platform = (platform or "").strip().lower()
+    return alias_map.get(platform, platform)
 
 
-def parse_entry(entry):
+def parse_entry(entry: str):
     entry = str(entry).strip()
     low = entry.lower()
 
     if "sooplive" in low or "afreecatv" in low:
-        match = re.search(
-            r"play\.sooplive\.com/([a-z0-9_-]+)(?:/\d+)?",
-            low,
-        )
+        match = re.search(r"play\.sooplive\.com/([a-z0-9_-]+)(?:/\d+)?", low)
         if match:
             return "soop", match.group(1)
-
-        match = re.search(
-            r"sooplive\.(?:com|co\.kr)/([a-z0-9_-]+)",
-            low,
-        )
+        match = re.search(r"sooplive\.(?:com|co\.kr)/([a-z0-9_-]+)", low)
         if match and match.group(1) not in {"play", "live", "channel"}:
             return "soop", match.group(1)
 
     if "chzzk" in low:
-        match = re.search(
-            r"chzzk\.naver\.com/(?:live/)?([a-z0-9_-]+)",
-            low,
-        )
+        match = re.search(r"chzzk\.naver\.com/(?:live/)?([a-z0-9_-]+)", low)
         if match:
             return "chzzk", match.group(1)
 
     if "17.live" in low or "17live" in low:
-        match = re.search(
-            r"17\.live/(?:en/)?(?:live/)?([a-z0-9_-]+)",
-            low,
-        )
+        match = re.search(r"17\.live/(?:en/)?(?:live/)?([a-z0-9_-]+)", low)
         if match:
             return "17live", match.group(1)
 
@@ -142,17 +114,12 @@ def parse_entry(entry):
             return "kick", match.group(1)
 
     if "youtube.com" in low or "youtu.be" in low:
-        match = re.search(
-            r"youtube\.com/(?:@|channel/|c/|user/)([a-z0-9_.-]+)",
-            low,
-        )
+        match = re.search(r"youtube\.com/(?:@|channel/|c/|user/)([a-z0-9_.-]+)", low)
         if match:
             return "youtube", "@" + match.group(1).lstrip("@")
-
         match = re.search(r"youtu\.be/([a-z0-9_-]+)", low)
         if match:
             return "youtube", match.group(1)
-
         match = re.search(r"youtube\.com/live/([a-z0-9_-]+)", low)
         if match:
             return "youtube", match.group(1)
@@ -206,87 +173,51 @@ def parse_entry(entry):
         platform, uid = entry.split(":", 1)
         platform = normalize_platform(platform)
         uid = uid.strip()
-
         if platform not in PLATFORMS:
             platform = "soop"
-
         if platform in {"youtube", "tiktok"} and not uid.startswith("@"):
             uid = "@" + uid
-
         return platform, uid
 
-    # Платформын нэргүй бичсэн хэрэглэгчийн нэрийг SOOP гэж үзнэ.
-    return "soop", entry.lstrip("@")
+    return "soop", entry.lstrip("@").strip()
 
 
-def make_entry(platform, uid):
+def make_entry(platform: str, uid: str) -> str:
     platform = normalize_platform(platform)
     uid = str(uid).strip()
-
     if platform not in PLATFORMS:
         platform = "soop"
-
     if platform in {"youtube", "tiktok"} and not uid.startswith("@"):
         uid = "@" + uid
-
     return f"{platform}:{uid}"
 
 
-def get_url(entry):
+def get_url(entry: str) -> str:
     platform, uid = parse_entry(entry)
     return PLATFORMS[platform].format(id=uid)
 
 
-def get_all_urls(entry):
+def get_all_urls(entry: str):
     platform, uid = parse_entry(entry)
 
     urls = {
-        "nimo": [
-            f"https://m.nimo.tv/live/{uid}",
-            f"https://m.nimo.tv/{uid}",
-        ],
-        "17live": [
-            f"https://17.live/en/live/{uid}",
-            f"https://17.live/live/{uid}",
-        ],
-        "soop": [
-            f"https://play.sooplive.com/{uid}",
-            f"https://play.sooplive.com/{uid}/",
-        ],
-        "chzzk": [
-            f"https://chzzk.naver.com/live/{uid}",
-        ],
-        "youtube": [
-            f"https://youtube.com/{uid}/live",
-            f"https://youtube.com/{uid}",
-        ],
-        "tiktok": [
-            f"https://tiktok.com/{uid}/live",
-            f"https://tiktok.com/{uid}",
-        ],
-        "bigo": [
-            f"https://bigo.tv/{uid}",
-            f"https://www.bigo.tv/{uid}",
-        ],
-        "douyin": [
-            f"https://live.douyin.com/{uid}",
-        ],
-        "twitcasting": [
-            f"https://twitcasting.tv/{uid}",
-        ],
-        "nicolive": [
-            f"https://live.nicovideo.jp/watch/{uid}",
-        ],
-        "facebook": [
-            f"https://facebook.com/{uid}/live",
-            f"https://facebook.com/{uid}",
-        ],
+        "nimo": [f"https://m.nimo.tv/live/{uid}", f"https://m.nimo.tv/{uid}"],
+        "17live": [f"https://17.live/en/live/{uid}", f"https://17.live/live/{uid}"],
+        "soop": [f"https://play.sooplive.com/{uid}", f"https://play.sooplive.com/{uid}/"],
+        "chzzk": [f"https://chzzk.naver.com/live/{uid}"],
+        "youtube": [f"https://youtube.com/{uid}/live", f"https://youtube.com/{uid}"],
+        "tiktok": [f"https://tiktok.com/{uid}/live", f"https://tiktok.com/{uid}"],
+        "bigo": [f"https://bigo.tv/{uid}", f"https://www.bigo.tv/{uid}"],
+        "douyin": [f"https://live.douyin.com/{uid}"],
+        "twitcasting": [f"https://twitcasting.tv/{uid}"],
+        "nicolive": [f"https://live.nicovideo.jp/watch/{uid}"],
+        "facebook": [f"https://facebook.com/{uid}/live", f"https://facebook.com/{uid}"],
     }
 
     return urls.get(platform, [get_url(entry)])
 
 
-def display_name(entry):
+def display_name(entry: str) -> str:
     platform, uid = parse_entry(entry)
     return f"@{uid.lstrip('@')} [{platform}]"
 
@@ -295,23 +226,22 @@ def load_usernames():
     try:
         with open(USERNAMES_FILE, "r", encoding="utf-8") as file:
             data = json.load(file)
-
-        if not isinstance(data, list):
-            return []
-
-        result = []
-        for item in data:
-            platform, uid = parse_entry(str(item))
-            normalized = make_entry(platform, uid)
-            if normalized not in result:
-                result.append(normalized)
-        return result
-
     except FileNotFoundError:
         return []
-    except (json.JSONDecodeError, OSError) as exc:
-        print(f"Could not load {USERNAMES_FILE}: {exc}", flush=True)
+    except Exception as exc:
+        print(f"Could not load usernames file: {exc}", flush=True)
         return []
+
+    if not isinstance(data, list):
+        return []
+
+    parsed = []
+    for item in data:
+        platform, uid = parse_entry(str(item))
+        entry = make_entry(platform, uid)
+        if entry not in parsed:
+            parsed.append(entry)
+    return parsed
 
 
 def save_usernames():
@@ -320,7 +250,7 @@ def save_usernames():
         with open(temp_file, "w", encoding="utf-8") as file:
             json.dump(USERNAMES, file, ensure_ascii=False, indent=2)
         os.replace(temp_file, USERNAMES_FILE)
-    except OSError as exc:
+    except Exception as exc:
         print(f"Could not save usernames: {exc}", flush=True)
 
 
@@ -328,9 +258,6 @@ USERNAMES = load_usernames()
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
     await update.message.reply_text(
         "✨🎬 YOON 🎬✨\n"
         "💜 Auto Recorder Bot\n\n"
@@ -347,12 +274,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
     if not context.args:
         await update.message.reply_text(
-            "⚠️ Хэрэглэх хэлбэр:\n\n"
+            "⚠️ Usage:\n\n"
             "SOOP: /add seoeun3104\n"
             "YouTube: /add youtube:@channel\n"
             "TikTok: /add tiktok:@username\n"
@@ -368,89 +292,91 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     entry = make_entry(platform, uid)
 
     if entry in USERNAMES:
-        await update.message.reply_text(
-            f"ℹ️ Аль хэдийн нэмэгдсэн:\n🎬 {display_name(entry)}"
-        )
+        await update.message.reply_text(f"ℹ️ Already added:\n🎬 {display_name(entry)}")
         return
 
     USERNAMES.append(entry)
     save_usernames()
 
     await update.message.reply_text(
-        f"✅ Нэмэгдлээ!\n\n"
+        f"✅ Added!\n\n"
         f"🎬 {display_name(entry)}\n"
         f"🔗 {get_url(entry)}\n"
-        f"🔴 Бичлэг: асаалттай"
+        f"🔴 Recording: ON\n"
+        f"🎞️ 360p30"
     )
 
 
 async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
     if not context.args:
-        await update.message.reply_text("Хэрэглэх хэлбэр: /remove seoeun3104")
+        await update.message.reply_text("⚠️ Usage: /remove seoeun3104")
         return
 
     raw = " ".join(context.args).strip()
     platform, uid = parse_entry(raw)
     entry = make_entry(platform, uid)
 
-    if entry not in USERNAMES:
-        await update.message.reply_text(
-            f"❌ Олдсонгүй:\n🎬 {display_name(entry)}"
-        )
-        return
-
-    USERNAMES.remove(entry)
-    save_usernames()
-    await update.message.reply_text(f"🗑️ Устгалаа:\n🎬 {display_name(entry)}")
+    if entry in USERNAMES:
+        USERNAMES.remove(entry)
+        save_usernames()
+        await update.message.reply_text(f"🗑️ Removed:\n🎬 {display_name(entry)}")
+    else:
+        await update.message.reply_text(f"❌ Not found:\n🎬 {display_name(entry)}")
 
 
 async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
     if not USERNAMES:
-        await update.message.reply_text("📭 Жагсаалт хоосон байна.\n👉 /add seoeun3104")
+        await update.message.reply_text("📭 Empty list.\n👉 /add seoeun3104")
         return
 
-    lines = ["👀 Шалгаж байгаа сувгууд:", ""]
+    text = "👀 Watching:\n\n"
     for user in USERNAMES:
-        status = "🔴 Бичиж байна" if user in RECORDING else "⏳ Хүлээж байна"
-        lines.append(f"🎬 {display_name(user)} — {status}")
-
-    await update.message.reply_text("\n".join(lines))
+        status = "🔴 REC" if user in RECORDING else "⏳ Waiting"
+        text += f"🎬 {display_name(user)}  {status}\n"
+    text += "\n🎞️ 360p30 | ✂️ 10 Min"
+    await update.message.reply_text(text)
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
     if not RECORDING:
-        await update.message.reply_text("😴 Одоогоор бичлэг алга.")
+        await update.message.reply_text("😴 No live streams are currently recording.")
         return
 
-    lines = ["🔴 Бичлэг хийж байна:", ""]
-    lines.extend(f"🎥 {display_name(user)}" for user in sorted(RECORDING))
-    await update.message.reply_text("\n".join(lines))
+    text = "🔴 Recording:\n\n"
+    for user in sorted(RECORDING):
+        text += f"🎥 {display_name(user)}\n"
+    await update.message.reply_text(text)
 
 
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
+    await update.message.reply_text("🧪 Testing...")
+    if not MIXDROP_EMAIL or not MIXDROP_KEY:
+        await update.message.reply_text("❌ Mixdrop config missing")
+    else:
+        await update.message.reply_text("✅ Mixdrop config present")
 
-    lines = ["🧪 Тохиргооны шалгалт:"]
-    lines.append("✅ Mixdrop тохиргоотой" if MIXDROP_EMAIL and MIXDROP_KEY
-                 else "❌ Mixdrop тохиргоо дутуу")
-    lines.append("✅ Channel тохиргоотой" if CHANNEL_ID
-                 else "❌ CHANNEL_ID тохиргоо дутуу")
-    await update.message.reply_text("\n".join(lines))
+    if not CHANNEL_ID:
+        await update.message.reply_text("❌ Channel ID missing")
+    else:
+        await update.message.reply_text("✅ Channel ID present")
 
 
-def get_nimo_info(room_id):
+def run_command(args, timeout=30):
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"Command error ({args[0]}): {exc}", flush=True)
+        return None
+
+
+def get_nimo_info(room_id: str):
     api_url = f"https://m.nimo.tv/api/v1/live/room?roomId={room_id}"
-
     try:
         response = requests.get(api_url, headers=HEADERS, timeout=15)
         if response.status_code != 200:
@@ -461,9 +387,9 @@ def get_nimo_info(room_id):
         room = details.get("room") or details
 
         for key in ("liveStreamUrl", "streamUrl", "hlsUrl", "m3u8Url", "playUrl"):
-            stream_url = room.get(key) or details.get(key)
-            if isinstance(stream_url, str) and stream_url.startswith("http"):
-                return True, [stream_url]
+            value = room.get(key) or details.get(key)
+            if isinstance(value, str) and value.startswith("http"):
+                return True, [value]
 
         live_status = room.get("liveStatus")
         return live_status in (1, "1", True, "live"), []
@@ -473,12 +399,8 @@ def get_nimo_info(room_id):
         return False, []
 
 
-def get_17live_info(uid):
-    api_url = (
-        "https://wap-api.17app.co/api/v1/liveStreams/"
-        f"getLiveStreamInfo?liveStreamID={uid}"
-    )
-
+def get_17live_info(uid: str):
+    api_url = f"https://wap-api.17app.co/api/v1/liveStreams/getLiveStreamInfo?liveStreamID={uid}"
     try:
         response = requests.get(api_url, headers=HEADERS_17, timeout=15)
         if response.status_code != 200:
@@ -494,11 +416,7 @@ def get_17live_info(uid):
         def scan(obj):
             if isinstance(obj, dict):
                 for value in obj.values():
-                    if (
-                        isinstance(value, str)
-                        and value.startswith("http")
-                        and (".m3u8" in value or ".flv" in value)
-                    ):
+                    if isinstance(value, str) and value.startswith("http") and (".m3u8" in value or ".flv" in value):
                         found.append(value)
                     else:
                         scan(value)
@@ -517,34 +435,34 @@ def get_17live_info(uid):
         return False, []
 
 
-def get_soop_info(uid):
+def get_soop_info(uid: str) -> bool:
     try:
-        response = requests.get(
-            f"https://bjapi.afreecatv.com/api/{uid}/station",
-            headers=HEADERS_SOOP,
-            timeout=15,
-        )
+        response = requests.get(f"https://bjapi.afreecatv.com/api/{uid}/station", headers=HEADERS_SOOP, timeout=15)
         if response.status_code == 200:
             data = response.json()
             return bool(data.get("broad_start") or data.get("is_live"))
     except Exception as exc:
         print(f"SOOP check error: {exc}", flush=True)
-
     return False
 
 
-def upload_to_mixdrop(file_path):
-    """Mixdrop руу multipart-ыг stream хийж илгээнэ; бүх файл RAM-д ачаалахгүй."""
+def get_bigo_live_url(url: str):
+    result = run_command(["streamlink", url, "best", "--stream-url"], timeout=45)
+    if result and result.returncode == 0:
+        stream_url = result.stdout.strip()
+        if stream_url.startswith("http"):
+            return stream_url
+    return None
+
+
+def upload_to_mixdrop(file_path: str):
     if not MIXDROP_EMAIL or not MIXDROP_KEY:
-        print("Mixdrop тохиргоо дутуу байна.", flush=True)
+        print("Mixdrop config missing.", flush=True)
         return None
 
     try:
-        size_mb = os.path.getsize(file_path) / 1024 / 1024
-        print(
-            f"Mixdrop upload эхэллээ: {file_path} ({size_mb:.1f} MB)",
-            flush=True,
-        )
+        file_size_mb = os.path.getsize(file_path) / 1024 / 1024
+        print(f"Mixdrop upload start: {file_path} ({file_size_mb:.1f} MB)", flush=True)
 
         with open(file_path, "rb") as file:
             encoder = MultipartEncoder(
@@ -566,12 +484,13 @@ def upload_to_mixdrop(file_path):
                 timeout=(30, 3600),
             )
             response.raise_for_status()
-            result = response.json()
+            data = response.json()
 
-        print(f"Mixdrop response: {result}", flush=True)
+        print(f"Mixdrop response: {data}", flush=True)
 
-        if result.get("success"):
-            return result.get("result", {}).get("url")
+        if data.get("success"):
+            result = data.get("result", {})
+            return result.get("url")
 
     except Exception as exc:
         print(f"Mixdrop upload error: {exc}\n{traceback.format_exc()}", flush=True)
@@ -579,24 +498,16 @@ def upload_to_mixdrop(file_path):
     return None
 
 
-def run_command(args, timeout=30):
-    """Системийн командын гаралтыг аюулгүйгээр шалгана."""
-    try:
-        return subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        print(f"Command error ({args[0]}): {exc}", flush=True)
-        return None
-
-
-def is_live(entry):
+def is_live(entry: str) -> bool:
     platform, uid = parse_entry(entry)
-    print(f"Шууд дамжуулалт шалгаж байна: {entry}", flush=True)
+    print(f"Checking live status: {entry}", flush=True)
+
+    if platform == "bigo":
+        for url in get_all_urls(entry):
+            stream_url = get_bigo_live_url(url)
+            if stream_url:
+                return True
+        return False
 
     if platform == "nimo":
         live, _ = get_nimo_info(uid)
@@ -611,73 +522,77 @@ def is_live(entry):
         return True
 
     for url in get_all_urls(entry):
-        result = run_command(
-            ["streamlink", url, "360p30,360p,best", "--stream-url"]
-        )
+        result = run_command(["streamlink", url, "360p30,360p,best", "--stream-url"], timeout=30)
         if result and result.stdout.strip().startswith("http"):
             return True
 
-        result = run_command(
-            ["yt-dlp", url, "--skip-download", "--quiet"],
-        )
+        result = run_command(["yt-dlp", url, "--skip-download", "--quiet"], timeout=30)
         if result and result.returncode == 0:
             return True
 
     return False
 
 
-def get_stream_url(entry):
-    platform, uid = parse_entry(entry)
+def get_stream_url(entry: str):
+    platform, _ = parse_entry(entry)
 
-    if platform == "nimo":
-        live, urls = get_nimo_info(uid)
-        if urls:
-            return urls[0]
-
-    if platform == "17live":
-        live, urls = get_17live_info(uid)
-        if urls:
-            return urls[0]
+    if platform == "bigo":
+        for url in get_all_urls(entry):
+            stream_url = get_bigo_live_url(url)
+            if stream_url:
+                return stream_url
+        return None
 
     for url in get_all_urls(entry):
         for quality in ("360p30", "360p", "best"):
-            result = run_command(
-                ["streamlink", url, quality, "--stream-url"]
-            )
+            result = run_command(["streamlink", url, quality, "--stream-url"], timeout=30)
             if result and result.stdout.strip().startswith("http"):
                 return result.stdout.strip()
 
         result = run_command(
-            [
-                "yt-dlp",
-                url,
-                "-f",
-                "best[height<=360][fps<=30]/best[height<=360]/best",
-                "-g",
-            ]
+            ["yt-dlp", url, "-f", "best[height<=360][fps<=30]/best[height<=360]/best", "-g"],
+            timeout=30,
         )
         if result and result.returncode == 0:
-            stream_url = result.stdout.strip().splitlines()
-            if stream_url and stream_url[0].startswith("http"):
-                return stream_url[0]
+            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if lines and lines[0].startswith("http"):
+                return lines[0]
 
-    print(f"Stream URL олдсонгүй: {entry}", flush=True)
+    print(f"No stream URL found for {entry}", flush=True)
     return None
 
 
-async def upload_one_part(entry, part_path, index, app):
-    """Mixdrop эсвэл Telegram-ийн аль нэг амжилттай бол файлыг устгана."""
+def is_file_ready(path: str) -> bool:
+    try:
+        if not os.path.isfile(path):
+            return False
+
+        initial_size = os.path.getsize(path)
+        if initial_size < 1000:
+            return False
+
+        if time.time() - os.path.getmtime(path) < 5:
+            return False
+
+        time.sleep(2)
+
+        if not os.path.isfile(path):
+            return False
+
+        return initial_size == os.path.getsize(path)
+
+    except Exception:
+        return False
+
+
+async def upload_one_part(entry: str, part_path: str, index: int, app):
     try:
         size_mb = os.path.getsize(part_path) / 1024 / 1024
     except OSError:
         return False
 
-    print(
-        f"Part {index} илгээж байна: {part_path} ({size_mb:.1f} MB)",
-        flush=True,
-    )
+    print(f"Uploading part {index}: {part_path} ({size_mb:.1f} MB)", flush=True)
 
-    # Том upload-ыг event loop-оос тусдаа thread-д ажиллуулна.
     mixdrop_link = await asyncio.to_thread(upload_to_mixdrop, part_path)
 
     if mixdrop_link:
@@ -694,10 +609,10 @@ async def upload_one_part(entry, part_path, index, app):
             f"━━━━━━━━━━━━\n"
             f"📂 Part {index}\n"
             f"🎞️ 360p30 | 📦 {size_mb:.1f} MB\n"
-            f"❌ Mixdrop upload амжилтгүй"
+            f"❌ Mixdrop upload failed"
         )
 
-    telegram_sent = False
+    sent = False
 
     if CHANNEL_ID:
         if size_mb < 48:
@@ -709,11 +624,11 @@ async def upload_one_part(entry, part_path, index, app):
                         caption=caption,
                         supports_streaming=True,
                     )
-                telegram_sent = True
+                sent = True
             except Exception as exc:
-                print(f"Telegram video илгээхэд алдаа: {exc}", flush=True)
+                print(f"Telegram video send failed: {exc}", flush=True)
 
-        if not telegram_sent:
+        if not sent:
             try:
                 with open(part_path, "rb") as document:
                     await app.bot.send_document(
@@ -722,50 +637,24 @@ async def upload_one_part(entry, part_path, index, app):
                         caption=caption,
                         filename=os.path.basename(part_path),
                     )
-                telegram_sent = True
+                sent = True
             except Exception as exc:
-                print(f"Telegram document илгээхэд алдаа: {exc}", flush=True)
+                print(f"Telegram document send failed: {exc}", flush=True)
     else:
-        print("CHANNEL_ID тохируулаагүй байна.", flush=True)
+        print("CHANNEL_ID is not configured.", flush=True)
 
-    if mixdrop_link or telegram_sent:
+    if sent or mixdrop_link:
         try:
             os.remove(part_path)
         except OSError as exc:
-            print(f"Файл устгаж чадсангүй: {exc}", flush=True)
+            print(f"Could not remove uploaded part: {exc}", flush=True)
         return True
 
-    # Аль ч үйлчилгээ рүү илгээгээгүй бол файлыг үлдээнэ.
-    print(f"Part upload амжилтгүй; файл хадгалагдлаа: {part_path}", flush=True)
     return False
 
 
-def is_file_ready(part_path):
-    try:
-        if not os.path.isfile(part_path):
-            return False
-
-        first_size = os.path.getsize(part_path)
-        if first_size < 1000:
-            return False
-
-        # Сүүлийн 5 секундэд өөрчлөгдсөн файл бичигдэж байж болзошгүй.
-        if time.time() - os.path.getmtime(part_path) < 5:
-            return False
-
-        time.sleep(2)
-
-        if not os.path.isfile(part_path):
-            return False
-
-        return first_size == os.path.getsize(part_path)
-
-    except OSError:
-        return False
-
-
-async def upload_ready_parts(entry, paths, uploaded, uploaded_files, app):
-    for part_path in paths:
+async def upload_ready_parts(entry: str, part_paths, uploaded_count: int, uploaded_files: set, app):
+    for part_path in part_paths:
         if part_path in uploaded_files:
             continue
 
@@ -773,45 +662,42 @@ async def upload_ready_parts(entry, paths, uploaded, uploaded_files, app):
         if not ready:
             continue
 
-        next_index = uploaded + 1
         try:
-            succeeded = await upload_one_part(entry, part_path, next_index, app)
+            succeeded = await upload_one_part(entry, part_path, uploaded_count + 1, app)
         except Exception as exc:
-            print(
-                f"Part боловсруулах алдаа: {exc}\n{traceback.format_exc()}",
-                flush=True,
-            )
+            print(f"Upload part failed: {exc}\n{traceback.format_exc()}", flush=True)
             succeeded = False
 
         if succeeded:
-            uploaded += 1
+            uploaded_count += 1
             uploaded_files.add(part_path)
 
-    return uploaded
+    return uploaded_count
 
 
 async def stop_process(process):
-    if process.poll() is not None:
+    if process is None or process.poll() is not None:
         return
 
-    process.terminate()
     try:
+        process.terminate()
         await asyncio.to_thread(process.wait, timeout=10)
     except subprocess.TimeoutExpired:
         process.kill()
-        await asyncio.to_thread(process.wait)
+        try:
+            await asyncio.to_thread(process.wait, timeout=10)
+        except Exception:
+            pass
 
 
-async def process_stream(entry, app):
+async def process_stream(entry: str, app):
     platform, uid = parse_entry(entry)
-
-    # Username-ийг filename-д аюулгүй болгоно.
     safe_uid = re.sub(r"[^a-zA-Z0-9_-]", "_", uid.lstrip("@")) or "stream"
     base_name = f"{platform}_{safe_uid}_{int(time.time())}"
 
-    print(f"Шууд дамжуулалт эхэллээ: {entry}", flush=True)
+    print(f"Live detected: {entry} -> Starting stream recording", flush=True)
 
-    uploaded = 0
+    uploaded_count = 0
     uploaded_files = set()
     retry = 0
     attempt = 0
@@ -821,8 +707,6 @@ async def process_stream(entry, app):
             process = None
             log_file = None
             attempt += 1
-
-            # Дахин холбогдох бүрд өөр filename ашиглаж, өмнөх хэсгийг дарж бичихээс сэргийлнэ.
             attempt_name = f"{base_name}_try{attempt}"
             pattern = f"{attempt_name}_part%03d.mp4"
             glob_pattern = f"{attempt_name}_part*.mp4"
@@ -832,10 +716,7 @@ async def process_stream(entry, app):
 
                 if not stream_url:
                     retry += 1
-                    print(
-                        f"Stream URL олдсонгүй; оролдлого {retry}/5: {entry}",
-                        flush=True,
-                    )
+                    print(f"No stream URL found; retry {retry}/5 for {entry}", flush=True)
                     await asyncio.sleep(15)
                     continue
 
@@ -870,62 +751,42 @@ async def process_stream(entry, app):
 
                 while process.poll() is None:
                     await asyncio.sleep(20)
-                    paths = sorted(glob.glob(glob_pattern))
-                    uploaded = await upload_ready_parts(
-                        entry, paths, uploaded, uploaded_files, app
-                    )
-
-                print(
-                    f"FFmpeg зогслоо ({process.returncode}): {entry}",
-                    flush=True,
-                )
+                    part_paths = sorted(glob.glob(glob_pattern))
+                    uploaded_count = await upload_ready_parts(entry, part_paths, uploaded_count, uploaded_files, app)
 
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 retry += 1
-                print(
-                    f"Бичлэг боловсруулах алдаа: {entry}: {exc}\n"
-                    f"{traceback.format_exc()}",
-                    flush=True,
-                )
+                print(f"Stream processing error for {entry}: {exc}\n{traceback.format_exc()}", flush=True)
             finally:
-                if process is not None and process.poll() is None:
+                if process is not None:
                     await stop_process(process)
                 if log_file is not None:
                     log_file.close()
 
-            # FFmpeg зогссоны дараа үлдсэн сегментүүдийг шалгаж илгээнэ.
-            paths = sorted(glob.glob(glob_pattern))
-            uploaded = await upload_ready_parts(
-                entry, paths, uploaded, uploaded_files, app
-            )
+            part_paths = sorted(glob.glob(glob_pattern))
+            uploaded_count = await upload_ready_parts(entry, part_paths, uploaded_count, uploaded_files, app)
 
-            try:
-                live = await asyncio.to_thread(is_live, entry)
-            except Exception as exc:
-                print(f"Live шалгахад алдаа: {exc}", flush=True)
-                live = False
-
+            live = await asyncio.to_thread(is_live, entry)
             if not live:
-                print(f"Шууд дамжуулалт дууслаа: {entry}", flush=True)
+                print(f"Stream ended for {entry}", flush=True)
                 break
 
-            print(f"Дамжуулалт тасарсан; дахин холбогдоно: {entry}", flush=True)
+            print(f"Stream disconnected but still live; reconnecting {entry}", flush=True)
             await asyncio.sleep(10)
 
     except asyncio.CancelledError:
-        print(f"Бичлэгийн task цуцлагдлаа: {entry}", flush=True)
+        print(f"Recording task was cancelled for {entry}", flush=True)
         raise
     finally:
         RECORDING.discard(entry)
-        print(f"Бичлэгийн төлөв цэвэрлэгдлээ: {entry}", flush=True)
+        print(f"Recording state cleared for {entry}", flush=True)
 
 
 async def check_loop(app):
     while True:
         try:
-            # Энэ loop event loop-ийг хаахгүй; network/subprocess шалгалт thread-д явна.
             for username in list(USERNAMES):
                 if username in RECORDING:
                     continue
@@ -933,7 +794,7 @@ async def check_loop(app):
                 try:
                     live = await asyncio.to_thread(is_live, username)
                 except Exception as exc:
-                    print(f"Live шалгах алдаа ({username}): {exc}", flush=True)
+                    print(f"Live check error for {username}: {exc}", flush=True)
                     continue
 
                 if live and username not in RECORDING:
@@ -943,20 +804,20 @@ async def check_loop(app):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"Шалгах loop-ийн алдаа: {exc}", flush=True)
+            print(f"Main checker loop error: {exc}", flush=True)
 
         await asyncio.sleep(60)
 
 
 async def run_bot():
     if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN тохируулаагүй байна.")
+        raise RuntimeError("BOT_TOKEN is missing.")
     if not CHANNEL_ID:
-        raise RuntimeError("CHANNEL_ID тохируулаагүй байна.")
+        raise RuntimeError("CHANNEL_ID is missing.")
 
     from telegram.request import HTTPXRequest
 
-    request = HTTPXRequest(
+    httpx_request = HTTPXRequest(
         read_timeout=600,
         write_timeout=600,
         connect_timeout=60,
@@ -966,7 +827,7 @@ async def run_bot():
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .request(request)
+        .request(httpx_request)
         .build()
     )
 
@@ -978,9 +839,7 @@ async def run_bot():
     app.add_handler(CommandHandler("test", test_command))
 
     print(
-        f"Bot эхэлж байна. "
-        f"Mixdrop тохиргоотой: {bool(MIXDROP_EMAIL and MIXDROP_KEY)}; "
-        f"хянах жагсаалт: {len(USERNAMES)}",
+        f"Bot starting. Mixdrop configured: {bool(MIXDROP_EMAIL and MIXDROP_KEY)}; tracked users: {len(USERNAMES)}",
         flush=True,
     )
 
@@ -991,12 +850,12 @@ async def run_bot():
         await app.start()
 
         if app.updater is None:
-            raise RuntimeError("Telegram updater эхлүүлж чадсангүй.")
+            raise RuntimeError("Telegram updater failed to initialize.")
 
         await app.updater.start_polling()
         checker_task = asyncio.create_task(check_loop(app))
 
-        print("Bot ажиллаж байна.", flush=True)
+        print("Bot is running.", flush=True)
         await asyncio.Event().wait()
 
     finally:
@@ -1007,7 +866,7 @@ async def run_bot():
             except asyncio.CancelledError:
                 pass
 
-        if app.updater is not None and app.updater.running:
+        if app.updater is not None:
             await app.updater.stop()
 
         if app.running:
@@ -1020,7 +879,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(run_bot())
     except KeyboardInterrupt:
-        print("Bot зогслоо.", flush=True)
+        print("Bot stopped manually.", flush=True)
     except Exception as exc:
-        print(f"Bot эхлэхэд алдаа гарлаа: {exc}", flush=True)
+        print(f"Bot startup failed: {exc}", flush=True)
         raise
